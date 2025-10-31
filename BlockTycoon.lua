@@ -1,0 +1,233 @@
+-- services --
+local players = game:GetService("Players")
+local workspace = game:GetService("Workspace")
+local replicatedStorage = game:GetService("ReplicatedStorage")
+local vim = game:GetService("VirtualInputManager")
+-- local player
+local player = players.LocalPlayer
+local mouse = player:GetMouse()
+local character = player.Character or player.CharacterAdded:Wait()
+local HRP = character:WaitForChild("HumanoidRootPart")
+local humanoid = character:FindFirstChildOfClass("Humanoid")
+ -- fluent
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local Window = Fluent:CreateWindow({
+    Title = "Merge Simulator Hub",
+    SubTitle = "by @dandush on discord",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(650, 500),
+    Acrylic = true,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.K
+})
+
+local Tabs = {
+    autoMergeTab = Window:AddTab({Title = "Auto Merge Tab" , Icon = "git-merge"}),
+    upgradesTab = Window:AddTab({Title = "Auto Upgrade Tab" , Icon = "arrow-up"}),
+    tapTab = Window:AddTab({Title = "Auto Tap Tab" , Icon = "mouse-pointer-click"}),
+    rebirthTab = Window:AddTab({Title = "Auto Rebirth Toggle", Icon = "repeat"}),
+}
+
+local options = Fluent.Options
+
+-- Remotes
+
+local tapRE = replicatedStorage:WaitForChild("Functions"):WaitForChild("Tap")
+local rebirthRE = replicatedStorage:WaitForChild("Functions"):WaitForChild("Rebirth")
+
+-- Modules
+
+local infoModule = require(replicatedStorage:WaitForChild("Info"))
+
+-- Static Directories
+
+local plotsDir = workspace:WaitForChild("Plots")
+
+-- Dynamic Variables
+
+local playerPlot
+
+for _,v in pairs(plotsDir:GetChildren()) do -- dynamically find the player's base
+    if v.Name == player.Name then playerPlot = v break end
+end
+
+-- Functions
+
+local function mergeBlocks(block1 : BasePart , block2:BasePart) : () -- function to merge blocks (easy since the network ownership is set to player ...)
+
+    block1.CFrame = block2.CFrame
+
+    repeat task.wait() until not block1.Parent
+
+end
+
+local function getBlockLevel(block : BasePart) : number -- helper function to the the level of a block
+    return block:GetAttribute("level")
+end
+
+local function mergeAllPossible() -- recursive function the merges all possible merges until none are available
+    local merged = false
+    local blocks = playerPlot.Blocks:GetChildren()
+
+    for i = 1, #blocks do
+        for j = 1, #blocks do
+            local block1 = blocks[i]
+            local block2 = blocks[j]
+
+            if block1 == block2 then continue end
+
+            if block1 and block2 then
+                local level1 = getBlockLevel(block1)
+                local level2 = getBlockLevel(block2)
+
+                if level1 == level2 then
+                    mergeBlocks(block1, block2)
+                    merged = true
+                    break
+                end
+            end
+        end
+        if merged then break end
+    end
+
+    if merged then
+        mergeAllPossible()
+    end
+end
+
+local function getPlayerCash() : number -- returns the player's money
+    return player:GetAttribute("Cash")
+end
+
+local function buyUpgrade(upgrade : Frame) : () -- buy upgrade helper
+    firesignal(upgrade.Buy.Activated)
+end
+
+local function getCheapestUpgrade() : (Frame , number) -- returns the cheapest upgrade and it's cost
+
+    local cheapestUpgrade = nil
+    local cheapestCost = math.huge
+
+    for _,upgrade in pairs(player.PlayerGui.World.Upgrades.Main:GetChildren()) do
+        if upgrade:GetAttribute("level") then
+            local level = upgrade:GetAttribute("level")
+            local maxLevel = #infoModule.UpgradeCost[upgrade.Name] + 1
+            if level >= maxLevel then continue end
+            local cost = infoModule.UpgradeCost[upgrade.Name][level]
+
+            if cost < cheapestCost then
+                cheapestCost = cost
+                cheapestUpgrade = upgrade
+            end
+        end
+    end
+
+    return cheapestUpgrade , cheapestCost
+
+end
+
+local function getBestBlock() : BasePart
+
+    local bestBlock = nil
+    local bestBlockLevel = 0
+
+    for _, block in pairs(playerPlot.Blocks:GetChildren()) do
+
+        if getBlockLevel(block) > bestBlockLevel then
+
+            bestBlockLevel = getBlockLevel(block)
+            bestBlock = block
+
+        end
+
+    end
+
+    return bestBlock
+
+end
+
+local function getNextRebirthCost() : ()
+    return 65000000 * (1 + player:GetAttribute("Rebirths") * 0.4)
+end
+
+-- Gui
+
+Tabs.autoMergeTab:AddToggle("AutoMerge",{Title = "Auto Merge Toggle" , Default = false})
+
+Tabs.upgradesTab:AddToggle("AutoUpgrade",{Title = "Auto Upgrade Toggle" , Default = false})
+
+Tabs.tapTab:AddToggle("AutoTapBest",{Title = "Auto Tap Best Block" , Default = false})
+
+Tabs.rebirthTab:AddToggle("AutoRebirth" ,{Title = "Auto Rebirth Toggle", Default = false})
+
+-- Auto Tap Best Block
+
+local bestBlock = getBestBlock()
+
+task.spawn(function()
+    while true do
+        if options.AutoTapBest.Value then
+            task.wait()
+            tapRE:FireServer(bestBlock)
+        else
+            task.wait(1)
+        end
+    end
+end)
+
+-- Auto Merge Connection
+
+playerPlot.Blocks.ChildAdded:Connect(function()
+
+    bestBlock = getBestBlock()
+
+    if options.AutoMerge.Value then
+        mergeAllPossible()
+    end
+
+end)
+
+-- Auto Upgrade Loop
+
+task.spawn(function()
+    while true do
+        if options.AutoUpgrade.Value then
+            task.wait(0.1)
+
+            local cheapestUpgrade, cheapestUpgradeCost = getCheapestUpgrade()
+
+            if getPlayerCash() > cheapestUpgradeCost then
+                print("Buying Upgrade: " .. cheapestUpgrade.Name .. "With Cost: " .. cheapestUpgradeCost)
+                buyUpgrade(cheapestUpgrade)
+            end
+
+        else
+            task.wait(1)
+        end
+    end
+end)
+
+-- Auto Rebirth Loop
+
+task.spawn(function()
+    while true do
+        if options.AutoRebirth.Value then
+            task.wait(0.1)
+            if getNextRebirthCost() < getPlayerCash() then
+                rebirthRE:InvokeServer(1)
+            end
+        else
+            task.wait(1)
+        end
+    end
+end)
+
+-- Anti Afk
+
+task.spawn(function()
+    while task.wait(100) do
+        vim:SendKeyEvent(true, Enum.KeyCode.Tilde, false, nil)
+        task.wait(0.1)
+        vim:SendKeyEvent(false, Enum.KeyCode.Tilde, false, nil)
+    end
+end)
