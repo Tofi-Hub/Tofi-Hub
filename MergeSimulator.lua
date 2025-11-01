@@ -164,13 +164,56 @@ Tabs.rebirthTab:AddToggle("AutoRebirth" ,{Title = "Auto Rebirth Toggle", Default
 
 local bestBlock = getBestBlock()
 
+local outline = Instance.new("SelectionBox") -- outline around the best block
+outline.Adornee = nil
+outline.LineThickness = 0.15
+outline.SurfaceTransparency = 1
+outline.Color3 = Color3.fromRGB(255, 0, 0)
+outline.Parent = workspace
+
+local billboard = Instance.new("BillboardGui")
+billboard.Adornee = nil
+billboard.Size = UDim2.new(0, 200, 0, 100)
+billboard.StudsOffset = Vector3.new(0, 5, 0)
+billboard.AlwaysOnTop = true
+billboard.Parent = workspace
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(1, 0, 1, 0)
+frame.BackgroundTransparency = 1
+frame.Parent = billboard
+
+local text = Instance.new("TextLabel")
+text.Size = UDim2.new(1, 0, 0, 40)
+text.Position = UDim2.new(0, 0, 0, 0)
+text.BackgroundTransparency = 1
+text.Text = "Tapping This Block"
+text.TextColor3 = Color3.fromRGB(255, 255, 255)
+text.TextScaled = true
+text.Font = Enum.Font.GothamBold
+text.Parent = frame
+
+
+local arrow = Instance.new("ImageLabel")
+arrow.Size = UDim2.new(0, 40, 0, 40)
+arrow.Position = UDim2.new(0.5, -20, 0, 40)
+arrow.BackgroundTransparency = 1
+arrow.Image = "rbxassetid://6034818372" -- down arrow
+arrow.ImageColor3 = Color3.fromRGB(255, 255, 255)
+arrow.Parent = frame
+
 task.spawn(function()
     while true do
         if options.AutoTapBest.Value then
             task.wait()
+            outline.Adornee = bestBlock
+            billboard.Adornee = bestBlock
+            billboard.StudsOffset = Vector3.new(0, bestBlock.Size.Y/2 + 3, 0)
             tapRE:FireServer(bestBlock)
         else
             task.wait(1)
+            outline.Adornee = nil
+            billboard.Adornee = nil
         end
     end
 end)
@@ -179,7 +222,7 @@ end)
 
 playerPlot.Blocks.ChildAdded:Connect(function()
 
-    bestBlock = getBestBlock()
+    bestBlock = getBestBlock() -- set new best block
 
     if options.AutoMerge.Value then
         mergeAllPossible()
