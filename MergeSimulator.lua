@@ -213,9 +213,7 @@ task.spawn(function()
             outline.Adornee = bestBlock
             billboard.Adornee = bestBlock
             billboard.StudsOffset = Vector3.new(0, bestBlock.Size.Y/2 + 3, 0)
-            for _ = 1,25 do
-                tapRE:FireServer(bestBlock)
-            end
+            tapRE:FireServer(bestBlock)
         else
             task.wait(1)
             outline.Adornee = nil
