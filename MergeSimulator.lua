@@ -34,6 +34,8 @@ local options = Fluent.Options
 
 local tapRE = replicatedStorage:WaitForChild("Functions"):WaitForChild("Tap")
 local rebirthRE = replicatedStorage:WaitForChild("Functions"):WaitForChild("Rebirth")
+local takeBlockRE = replicatedStorage:WaitForChild("Functions"):WaitForChild("TakeBlock")
+local dropBlockRE = replicatedStorage:WaitForChild("Functions"):WaitForChild("DropBlock")
 
 -- Modules
 
@@ -57,7 +59,8 @@ local function mergeBlocks(block1 : BasePart , block2:BasePart) : () -- function
 
     block1.CFrame = block2.CFrame
 
-    repeat task.wait() until not block1.Parent
+    local start = tick()
+    repeat task.wait() until tick() - start > 2 or not block1.Parent or not block2.Parent
 
 end
 
@@ -70,28 +73,29 @@ local function mergeAllPossible() -- recursive function the merges all possible 
     local blocks = playerPlot.Blocks:GetChildren()
 
     for i = 1, #blocks do
+        if merged then break end
         for j = 1, #blocks do
             local block1 = blocks[i]
             local block2 = blocks[j]
 
             if block1 == block2 then continue end
 
-            if block1 and block2 then
-                local level1 = getBlockLevel(block1)
-                local level2 = getBlockLevel(block2)
+            local level1 = getBlockLevel(block1)
+            local level2 = getBlockLevel(block2)
 
-                if level1 == level2 then
-                    mergeBlocks(block1, block2)
-                    merged = true
-                    break
-                end
+            if level1 == level2 then
+
+                warn("Merged 2 Blocks")
+                mergeBlocks(block1, block2)
+                merged = true
+                break
             end
         end
-        if merged then break end
     end
 
     if merged then
-        mergeAllPossible()
+        task.wait()
+        return mergeAllPossible()
     end
 end
 
@@ -209,7 +213,9 @@ task.spawn(function()
             outline.Adornee = bestBlock
             billboard.Adornee = bestBlock
             billboard.StudsOffset = Vector3.new(0, bestBlock.Size.Y/2 + 3, 0)
-            tapRE:FireServer(bestBlock)
+            for _ = 1,25 do
+                tapRE:FireServer(bestBlock)
+            end
         else
             task.wait(1)
             outline.Adornee = nil
