@@ -45,6 +45,10 @@ local infoModule = require(replicatedStorage:WaitForChild("Info"))
 
 local plotsDir = workspace:WaitForChild("Plots")
 
+-- Flags
+
+local merging = false
+
 -- Dynamic Variables
 
 local playerPlot
@@ -62,6 +66,15 @@ local function mergeBlocks(block1 : BasePart , block2:BasePart) : () -- function
     local start = tick()
     repeat task.wait() until tick() - start > 2 or not block1.Parent or not block2.Parent
 
+    if block1.Parent and block2.Parent then
+        character:PivotTo(block1.CFrame + Vector3.new(3,2,0))
+        task.wait(0.5)
+        takeBlockRE:FireServer(block1)
+        task.wait(0.5)
+        dropBlockRE:FireServer()
+        task.wait(0.25)
+    end
+
 end
 
 local function getBlockLevel(block : BasePart) : number -- helper function to the the level of a block
@@ -69,6 +82,8 @@ local function getBlockLevel(block : BasePart) : number -- helper function to th
 end
 
 local function mergeAllPossible() -- recursive function the merges all possible merges until none are available
+    merging = true
+    if not options.AutoMerge.Value then return end
     local merged = false
     local blocks = playerPlot.Blocks:GetChildren()
 
@@ -97,6 +112,8 @@ local function mergeAllPossible() -- recursive function the merges all possible 
         task.wait()
         return mergeAllPossible()
     end
+
+    merging = false
 end
 
 local function getPlayerCash() : number -- returns the player's money
@@ -213,11 +230,25 @@ task.spawn(function()
             outline.Adornee = bestBlock
             billboard.Adornee = bestBlock
             billboard.StudsOffset = Vector3.new(0, bestBlock.Size.Y/2 + 3, 0)
-            tapRE:FireServer(bestBlock)
         else
             task.wait(1)
             outline.Adornee = nil
             billboard.Adornee = nil
+        end
+    end
+end)
+
+task.spawn(function()
+    while true do
+        if options.AutoTapBest.Value then
+            task.wait()
+            for _ = 1,25 do
+                task.spawn(function()
+                    tapRE:FireServer(bestBlock)
+                end)
+            end
+        else
+            task.wait(1)
         end
     end
 end)
@@ -229,7 +260,9 @@ playerPlot.Blocks.ChildAdded:Connect(function()
     bestBlock = getBestBlock() -- set new best block
 
     if options.AutoMerge.Value then
-        mergeAllPossible()
+        if not merging then
+            mergeAllPossible()
+        end
     end
 
 end)
