@@ -241,12 +241,8 @@ end)
 task.spawn(function()
     while true do
         if options.AutoTapBest.Value then
-            task.wait()
-            for _ = 1,25 do
-                task.spawn(function()
-                    tapRE:FireServer(bestBlock)
-                end)
-            end
+            task.wait(1 / 25) -- clicks per second
+            tapRE:FireServer(bestBlock)
         else
             task.wait(1)
         end
