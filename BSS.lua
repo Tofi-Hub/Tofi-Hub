@@ -82,13 +82,6 @@ local queued =
     queuedTokens = {},
 }
 
--- Get The New Character After Death
-
-player.CharacterAdded:Connect(function(char)
-    character = char
-    humanoid = char:FindFirstChildOfClass("Humanoid")
-end)
-
 -- Dynamic Variables
 
 local playerHive
@@ -107,6 +100,11 @@ params.FilterType = Enum.RaycastFilterType.Whitelist
 params.FilterDescendantsInstances = {flowerZonesDir}
 
 local function getPlayerField() : BasePart -- will return the field instance inside flowerZonesDir
+
+    if flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown and options.FlowerSelectDropdown.Value or "Isn't it so cool that tofi hub is open source? join our discord at https://discord.gg/zMjqmUmZ ") then
+        return flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value)
+    end
+
     if not character then return nil end
 
     local origin = character:GetPivot().Position -- get origin position
@@ -154,6 +152,7 @@ local tweenProxy = Instance.new("CFrameValue") -- makes a way to communicate bet
 
 local function goTo(pos : CFrame, method : string) : () -- main function for movement , will support different movement methods
 
+    if not pos then return end
     if not character then return end
 
     local movementMethod = method
@@ -178,6 +177,8 @@ local function goTo(pos : CFrame, method : string) : () -- main function for mov
             repeat
 
                 humanoid.WalkToPoint = waypoint.Position
+
+                if playerState.convertingBackpack then return end
 
                 task.wait()
 
@@ -215,6 +216,18 @@ local function goTo(pos : CFrame, method : string) : () -- main function for mov
     end
 
 end
+
+-- Get The New Character After Death
+
+player.CharacterAdded:Connect(function(char)
+    character = char
+    humanoid = char:FindFirstChildOfClass("Humanoid")
+
+    if options.AutoFarmToggle.Value then
+        goTo(flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value) and flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value).CFrame , "Tween")
+    end
+
+end)
 
 local function getClosestObjectInTable(tbl : table , position : Vector3) : BasePart
 
@@ -297,7 +310,7 @@ Tabs.autoFarmTab:AddDropdown(
     "SelectedMovementOption",
     {
         Title = "Select Preferred Movement Option",
-        Values = { "Teleport" , "Walk" , "Tween" },
+        Values = { "Tween" , "Walk" , "Teleport" },
         Multi = false,
         Default = 1
     }
@@ -312,27 +325,6 @@ Tabs.autoFarmTab:AddSlider("tweenSpeed",
         Max = 200,
         Rounding = 0,
     })
-
-Tabs.autoFarmTab:AddSlider("maxTokenCollectTimeout",
-    {
-        Title = "Tokens Collect Timeout",
-        Description = "Amount of Time To Wait Before Abandoning A Token's Collection",
-        Default = 5,
-        Min = 1,
-        Max = 15,
-        Rounding = 0,
-    })
-
-Tabs.autoFarmTab:AddSlider("maxBubbleCollectTimeout",
-    {
-        Title = "Bubbles Collect Timeout",
-        Description = "Amount of Time To Wait Before Abandoning A Bubble's Collection",
-        Default = 5,
-        Min = 1,
-        Max = 15,
-        Rounding = 0,
-    })
-
 
 -- Local Player Tab
 
@@ -426,6 +418,8 @@ task.spawn(function()
 
             end
 
+            
+
         else
             task.wait(1)
         end
@@ -442,7 +436,11 @@ task.spawn(function()
             task.wait(0.5)
 
             if coreStats.Pollen.Value >= coreStats.Capacity.Value then
+
+                print("Converting Backpack")
+
                 playerState.convertingBackpack = true
+                humanoid:Move(Vector3.new(0,0,0))
 
                 goTo(playerHive.SpawnPos.Value , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value)
 
@@ -450,7 +448,19 @@ task.spawn(function()
 
                 playerHiveCommandRE:FireServer("ToggleHoneyMaking")
 
-                repeat task.wait() until coreStats.Pollen.Value == 0
+                repeat
+                    task.wait(1) 
+
+                    if player.PlayerGui.ScreenGui.ActivateButton.Position.Y.Offset < -100 then
+                        print("Going To Hive")
+                        goTo(playerHive.SpawnPos.Value , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value) 
+                    end
+                    if player.PlayerGui.ScreenGui.ActivateButton.BackgroundColor3  == Color3.fromRGB(50,131,255) then 
+                        print("Toggling Honey Making")
+                        playerHiveCommandRE:FireServer("ToggleHoneyMaking") 
+                    end
+                    
+                until coreStats.Pollen.Value == 0
 
                 local balloon = getPlayerBalloon()
 
@@ -462,6 +472,7 @@ task.spawn(function()
 
                 if options.AutoFarmToggle.Value then
                     goTo(flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value) and flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value).CFrame , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value)
+                    print("Returned To Field")
                 end
 
             end
@@ -474,85 +485,63 @@ end)
 
 -- Auto Collect Tokens / Bubbles
 
--- Chat GPT Is My Lord And Savor, This Is A "Weak" Table That Forgets Instances When They Get Deleted / Destroyed So That I Wont Have To Clear It Myself
-
 local trackedTokens = setmetatable({}, { __mode = "k" })
 
 task.spawn(function()
     while true do
-
         task.wait()
 
-        if not character then continue end
-        if playerState.collectingBubble then continue end
-        if playerState.collectingToken then continue end
-        if playerState.convertingBackpack then continue end
+        if not character or playerState.collectingBubble or playerState.collectingToken or playerState.convertingBackpack or not options.AutoFarmToggle.Value then
+            continue
+        end
 
+        local charPos = character:GetPivot().Position
         local playerField = getPlayerField()
-
         if not playerField then continue end
 
-        -- Get Closest Token And Bubble
-
-        local closestBubble = nil
-        local closestToken = nil
-
-        -- GET CLOSEST BUBBLE
+        local closestBubble, closestToken
+        local bubbleDist, tokenDist = math.huge, math.huge
 
         if options.AutoFarmBubblesCollect.Value then
 
-            local tbl = {}
+            for _, bubble in pairs(particlesDir:GetChildren()) do
 
-            for _,bubble in pairs(particlesDir:GetChildren()) do
+                if bubble.Name == "Bubble" and isPointInPart2D(playerField, bubble.Position) then
 
-                if bubble.Name == "Bubble" then
+                    local dist = (bubble.Position - charPos).Magnitude
 
-                    if isPointInPart2D(playerField , bubble.Position) then
+                    if dist < bubbleDist then
 
-                        table.insert(tbl,bubble)
+                        bubbleDist = dist
+                        closestBubble = bubble
 
                     end
-
                 end
-
             end
-
-            closestBubble = getClosestObjectInTable(tbl , character:GetPivot().Position)
-
         end
-
-        -- GET CLOSEST TOKEN
 
         if options.AutoFarmTokensCollect.Value then
 
-            local tbl = {}
+            for _, token in pairs(collectiblesDir:GetChildren()) do
+                if not trackedTokens[token] and not table.find(collectiblesSnapshot, token) and isPointInPart2D(playerField, token.Position) then
+                    
+                    local dist = (token.Position - charPos).Magnitude
 
-            for _,token in pairs(collectiblesDir:GetChildren()) do
+                    if dist < tokenDist then
 
-                if trackedTokens[token] then continue end
-                if table.find(collectiblesSnapshot , token) then continue end
+                        tokenDist = dist
+                        closestToken = token
 
-                if isPointInPart2D(playerField , token.Position) then
-
-                    table.insert(tbl,token)
-
+                    end
                 end
-
             end
-
-            closestToken = getClosestObjectInTable(tbl , character:GetPivot().Position)
 
         end
 
-        -- GET TOKEN / BUBBLE (based on whats closer)
-
+        local shouldGet, kind
         if closestBubble and closestToken then
 
-            -- Get Closer (Bubble/Token) And Store It Into "shouldGet"
-
-            local shouldGet, kind
-
-            if (closestBubble.Position - character:GetPivot().Position).Magnitude < (closestToken.Position - character:GetPivot().Position).Magnitude then
+            if bubbleDist < tokenDist then
 
                 shouldGet, kind = closestBubble, "Bubble"
 
@@ -562,56 +551,40 @@ task.spawn(function()
 
             end
 
-            if kind == "Bubble" then
+        elseif closestBubble then
 
-                playerState.collectingBubble = true
-
-                goTo(CFrame.new(shouldGet.Position) , options.SelectedMovementOption.Value)
-
-                local start = tick()
-
-                repeat task.wait() until tick() - start > tonumber(options.maxBubbleCollectTimeout.Value) or not shouldGet.Parent or not shouldGet
-
-                playerState.collectingBubble = false
-
-            else
-
-                playerState.collectingToken = true
-
-                goTo(CFrame.new(shouldGet.Position) , options.SelectedMovementOption.Value)
-
-                task.wait(0.3)
-
-                trackedTokens[shouldGet] = true
-
-                playerState.collectingToken = false
-
-            end
+            shouldGet, kind = closestBubble, "Bubble"
 
         elseif closestToken then
 
-            playerState.collectingToken = true
+            shouldGet, kind = closestToken, "Token"
 
-            goTo(CFrame.new(closestToken.Position) , options.SelectedMovementOption.Value)
+        else
 
-            task.wait(0.3)
-
-            trackedTokens[closestToken] = true
-            playerState.collectingToken = false
-
-        elseif closestBubble then
-
-            playerState.collectingBubble = true
-
-            goTo(CFrame.new(closestBubble.Position) , options.SelectedMovementOption.Value)
-
-            local start = tick()
-
-            repeat task.wait() until tick() - start > tonumber(options.maxBubbleCollectTimeout.Value) or not closestBubble.Parent or not closestBubble
-
-            playerState.collectingBubble = false
+            continue
 
         end
 
+        if kind == "Bubble" then
+
+            playerState.collectingBubble = true
+
+            goTo(CFrame.new(shouldGet.Position), options.SelectedMovementOption.Value)
+
+            local start = tick()
+            repeat task.wait() until not shouldGet.Parent
+
+            playerState.collectingBubble = false
+
+        else
+
+            playerState.collectingToken = true
+
+            goTo(CFrame.new(shouldGet.Position), options.SelectedMovementOption.Value)
+            task.wait(0.1)
+
+            trackedTokens[shouldGet] = true
+            playerState.collectingToken = false
+        end
     end
 end)
