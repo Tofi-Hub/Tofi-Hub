@@ -24,6 +24,6 @@ Simply execute the following code in your executor to load **Tofi Hub**:
 loadstring(game:HttpGet("https://raw.githubusercontent.com/Tofi-Hub/Tofi-Hub/refs/heads/main/loader.lua"))()
 ```
 
-## Contant Us
+## Contant us
 
 You Can Join Our Discord At https://discord.gg/zMjqmUmZ
