@@ -461,7 +461,7 @@ task.spawn(function()
                 playerState.convertingBackpack = false
 
                 if options.AutoFarmToggle.Value then
-                    goTo(flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value) and flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value) , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value)
+                    goTo(flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value) and flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value).CFrame , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value)
                 end
 
             end
