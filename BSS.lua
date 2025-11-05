@@ -37,6 +37,7 @@ local options = Fluent.Options
 
 -- Static Directories
 
+local monstersDir = workspace:WaitForChild("Monsters")
 local particlesDir = workspace:WaitForChild("Particles")
 local flowerZonesDir = workspace:WaitForChild("FlowerZones")
 local coreStats = player:WaitForChild("CoreStats")
@@ -58,8 +59,6 @@ local claimHiveRE = eventsDir:WaitForChild("ClaimHive")
 
 local session = {
 
-    poppedBubbles = 0,
-    collectedTokens = 0,
     collectedPollen = 0
 }
 
@@ -67,12 +66,24 @@ local session = {
 
 local playerState =
 {
-    autoFarming = false,
+    -- If Collecting Bubble/Tokens Currently , True
+
     collectingToken = false,
     collectingBubble = false,
+
+    -- If Converting Backpack Currently, True
+
     convertingBackpack = false,
 
+    -- If Walking Via Auto Farm Currently , True
+
+    autoFarmWalking = false,
+
 }
+
+-- Variable To Handle Stopping Current Walk, If 2 Walks Collide In Time
+
+local cancelWalk = false
 
 -- Dynamic Variables
 
@@ -172,6 +183,11 @@ local function goTo(pos : CFrame, method : string) : () -- main function for mov
 
                 if playerState.convertingBackpack then return end
 
+                if cancelWalk then
+                    cancelWalk = false
+                    return
+                end
+
                 task.wait()
 
             until (character:GetPivot().Position - waypoint.Position).Magnitude < 4
@@ -261,7 +277,7 @@ local function getPlayerBalloon() : Folder -- gets the player's balloon if it ex
 
 end
 
-local function getNewOptionsAfterSearch(tbl : table, search : string) : table
+local function getNewOptionsAfterSearch(tbl : table, search : string) : table -- for field searching
 
     local result = {}
 
@@ -275,6 +291,26 @@ local function getNewOptionsAfterSearch(tbl : table, search : string) : table
     end
 
     return result
+
+end
+
+local function isPlayerAttacked() : boolean -- returns true if the player is currently being hunted down by a mob
+
+    if not character then return false end
+
+    for _,monster in pairs(monstersDir:GetChildren()) do
+        if monster:FindFirstChild("Target") then
+
+            if monster.Target.Value == character then return true end
+            
+        else
+
+            print("Target Not Found In: " .. monster:GetFullName())
+
+        end
+    end
+
+    return false
 
 end
 
@@ -319,10 +355,10 @@ flowerFieldsDropdown = Tabs.autoFarmTab:AddDropdown(
 
 flowerFieldsDropdown:OnChanged(function()
 
+    flowerFieldsDropdown:Close() -- minimize dropdown
+
     if not options.AutoFarmToggle.Value then return end
     if options.FlowerSelectDropdown.Value == "None" then return end
-
-    flowerFieldsDropdown:Close() -- minimize dropdown
 
     goTo(flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value) and flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value).CFrame + Vector3.new(0,5,0) , "Tween")
 
@@ -432,6 +468,8 @@ end
 
 -- Auto Farm Loop
 
+local lastWalk = tick() -- Variable To Not Change The Walk Route Too Much
+
 local Anim = Instance.new("Animation")
 Anim.AnimationId = "rbxassetid://522635514"
 
@@ -453,10 +491,21 @@ task.spawn(function()
 
             -- Checks To See If The User Should Auto Farm
 
+            if not humanoid then continue end
             if not character then continue end
             if playerState.collectingBubble then continue end
             if playerState.collectingToken then continue end
-            if playerState.convertingBackpack then continue end
+
+            if playerState.convertingBackpack then
+                if playing then
+                    playing = false
+                    track:Stop()
+                end
+
+                continue
+            end
+
+            -- Auto Use Tool + Handle Tool Animations
 
             if options.AutoTool.Value then
 
@@ -482,10 +531,39 @@ task.spawn(function()
                 end
             end
 
-            
+            -- So The Player Doesnt Get Killed Instantly Upon Going To Field
+
+            if isPlayerAttacked() then
+                humanoid.Jump = true
+            end
+
+            -- Make The Player Walk A Bit
+
+            local playerField = getPlayerField()
+
+            if playerField then
+
+                if tick() - lastWalk > 3 then
+
+                    local randomFieldX = math.random(playerField.Position.X - playerField.Size.X / 2 , playerField.Position.X + playerField.Size.X / 2)
+                    local randomFieldZ = math.random(playerField.Position.Z - playerField.Size.Z / 2 , playerField.Position.Z + playerField.Size.Z / 2)
+
+                    local randomFieldPosition = Vector3.new(randomFieldX , playerField.Position.Y , randomFieldZ)
+
+                    humanoid.WalkToPoint = randomFieldPosition -- will always walk here since i dont wanna use goTo since it does unnecesarry pathfiniding + yields
+                    lastWalk = tick()
+
+                end
+            end
 
         else
             task.wait(1)
+
+                if playing then
+                    playing = false
+                    track:Stop()
+                end
+
         end
 
     end
