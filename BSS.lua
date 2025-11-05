@@ -668,7 +668,7 @@ task.spawn(function()
 
             for _, token in pairs(collectiblesDir:GetChildren()) do
                 if not trackedTokens[token] and not table.find(collectiblesSnapshot, token) then
-                    
+
                     if options.AutoFarmMyFieldOnly.Value then
                     
                         if not isPointInPart2D(playerField, token.Position) then continue end
@@ -687,9 +687,21 @@ task.spawn(function()
                                     closestToken = token
 
                             end
-                        end
-                    end
 
+                        end
+                        
+                    else
+
+                        local dist = (token.Position - charPos).Magnitude
+
+                        if dist < tokenDist then
+
+                            tokenDist = dist
+                            closestToken = token
+
+                        end
+
+                    end
                 end
             end
 
