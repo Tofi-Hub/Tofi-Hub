@@ -667,22 +667,29 @@ task.spawn(function()
         if options.AutoFarmTokensCollect.Value then
 
             for _, token in pairs(collectiblesDir:GetChildren()) do
-                if not trackedTokens[token] and not table.find(collectiblesSnapshot, token) and isPointInPart2D(playerField, token.Position) then
+                if not trackedTokens[token] and not table.find(collectiblesSnapshot, token) then
+                    
+                    if options.AutoFarmMyFieldOnly.Value then
+                    
+                        if not isPointInPart2D(playerField, token.Position) then continue end
+
+                    end
 
                     if options.IgnoreHoneyTokens.Value then
-                        
+
                         if token.FrontDecal.Texture ~= "rbxassetid://1472135114" then
 
                             local dist = (token.Position - charPos).Magnitude
 
                             if dist < tokenDist then
 
-                                tokenDist = dist
-                                closestToken = token
+                                    tokenDist = dist
+                                    closestToken = token
 
                             end
                         end
                     end
+
                 end
             end
 
