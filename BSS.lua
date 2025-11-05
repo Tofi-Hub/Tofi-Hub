@@ -12,7 +12,7 @@ local RS = game:GetService("RunService") -- rs is short for right shit btw 🤓
 local player = players.LocalPlayer
 local mouse = player:GetMouse()
 local character = player.Character or player.CharacterAdded:Wait()
-local humanoid = character:FindFirstChildOfClass("Humanoid")
+local humanoid = character:WaitForChild("Humanoid")
 
  -- Fluent UI Setup
 
@@ -72,14 +72,6 @@ local playerState =
     collectingBubble = false,
     convertingBackpack = false,
 
-}
-
--- Tables To Store Queued Tokens And Bubbles, These Are Bubbles And Tokens That Were Stored While Other Stuff Was Happening
-
-local queued =
-{
-    queuedBubbles = {},
-    queuedTokens = {},
 }
 
 -- Dynamic Variables
@@ -195,7 +187,7 @@ local function goTo(pos : CFrame, method : string) : () -- main function for mov
 
         local duration = distance / speed
 
-        local tween = TS:Create(tweenProxy, TweenInfo.new(duration), {Value = pos})
+        local tween = TS:Create(tweenProxy, TweenInfo.new(duration , Enum.EasingStyle.Linear), {Value = pos})
 
         -- Update pivot each frame as the tween runs
         local connection
@@ -221,10 +213,10 @@ end
 
 player.CharacterAdded:Connect(function(char)
     character = char
-    humanoid = char:FindFirstChildOfClass("Humanoid")
+    humanoid = char:WaitForChild("Humanoid")
 
     if options.AutoFarmToggle.Value then
-        goTo(flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value) and flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value).CFrame , "Tween")
+        goTo(flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value) and flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value).CFrame + Vector3.new(0,5,0) , "Tween")
     end
 
 end)
@@ -269,16 +261,54 @@ local function getPlayerBalloon() : Folder -- gets the player's balloon if it ex
 
 end
 
+local function getNewOptionsAfterSearch(tbl : table, search : string) : table
+
+    local result = {}
+
+    for _,v in pairs(tbl) do
+
+        local strippedValue = v:lower():gsub(" ", "")
+
+        if string.find(strippedValue , search) then
+            table.insert(result , v)
+        end
+    end
+
+    return result
+
+end
+
 -- GUI
 
 -- Auto Farm Tab
 
 local autoFarmToggle = Tabs.autoFarmTab:AddToggle("AutoFarmToggle",{Title = "Auto Farm Toggle" , Default = false})
 
+local flowerFieldsDropdown
+
 local flowerZonesTable = getStringsOfFolder(flowerZonesDir)
 table.insert(flowerZonesTable ,1 , "None")
 
-Tabs.autoFarmTab:AddDropdown(
+Tabs.autoFarmTab:AddInput("searchInput" ,
+{
+    Title = "Search Flower Fields",
+    Default = "",
+    Placeholder = "Pine Tree Forest",
+    Numeric = false,
+    Finished = false,
+    Callback = function(Value)
+
+        print("Search: " .. Value .. "Got Results: " .. table.concat(getNewOptionsAfterSearch(flowerZonesTable , Value:lower() , " , ")))
+
+        local strippedSearch = Value:lower():gsub(" " , "")
+
+        flowerFieldsDropdown:SetValues(getNewOptionsAfterSearch(flowerZonesTable , strippedSearch))
+    end,
+})
+
+
+
+flowerFieldsDropdown = Tabs.autoFarmTab:AddDropdown(
     "FlowerSelectDropdown",
     {
         Title = "Select Flower Zone To Auto Farm In",
@@ -287,12 +317,23 @@ Tabs.autoFarmTab:AddDropdown(
         Default = 1,
 })
 
+flowerFieldsDropdown:OnChanged(function()
+
+    if not options.AutoFarmToggle.Value then return end
+    if options.FlowerSelectDropdown.Value == "None" then return end
+
+    flowerFieldsDropdown:Close() -- minimize dropdown
+
+    goTo(flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value) and flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value).CFrame + Vector3.new(0,5,0) , "Tween")
+
+end)
+
 autoFarmToggle:OnChanged(function()
     
     if not options.AutoFarmToggle.Value then return end
     if options.FlowerSelectDropdown.Value == "None" then return end
 
-    goTo(flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value) and flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value).CFrame , "Tween")
+    goTo(flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value) and flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value).CFrame + Vector3.new(0,5,0) , "Tween")
 
 end)
 
@@ -302,6 +343,7 @@ Tabs.autoFarmTab:AddToggle("AutoTool" , {Title = "Auto Use Tool" , Default = tru
 Tabs.autoFarmTab:AddToggle("AutoConvert" , {Title = "Auto Convert Toggle" , Default = true})
 Tabs.autoFarmTab:AddToggle("AutoFarmBubblesCollect",{Title = "Auto Collect Bubbles", Default = false})
 Tabs.autoFarmTab:AddToggle("AutoFarmTokensCollect",{Title = "Auto Collect Tokens", Default = false})
+Tabs.autoFarmTab:AddToggle("IgnoreHoneyTokens" , {Title = "Ignore Honey Token Collection When Collecting Tokens" , Default = true})
 Tabs.autoFarmTab:AddToggle("AutoFarmMyFieldOnly", {Title = "Only Collect Tokens From Current Farming Field" , Default = true})
 
 Tabs.autoFarmTab:AddSection("Config")
@@ -390,6 +432,16 @@ end
 
 -- Auto Farm Loop
 
+local Anim = Instance.new("Animation")
+Anim.AnimationId = "rbxassetid://522635514"
+
+local playing = true
+
+local track = humanoid:LoadAnimation(Anim)
+track.Looped = true
+track:Play() -- loading the animation so that people dont cry
+
+
 local lastToolCall = tick() -- ik this is innefficent and bad code but i dont wanna actually get the tool cooldown using require so ill just make it collect every like 0.1 seconds
 
 task.spawn(function()
@@ -410,12 +462,24 @@ task.spawn(function()
 
                 if tick() - lastToolCall > 0.1 then -- if more than 0.1 seconds have passed since the last tool toggle
 
+                    if not playing then
+
+                        playing = true
+                        track:Play()
+
+                    end
+
                     toolCollectRE:FireServer()
 
                     lastToolCall = tick()
 
                 end
 
+            else
+                if playing then
+                    playing = false
+                    track:Stop()
+                end
             end
 
             
@@ -435,6 +499,8 @@ task.spawn(function()
         if options.AutoConvert.Value then
             task.wait(0.5)
 
+            if not character then continue end
+
             if coreStats.Pollen.Value >= coreStats.Capacity.Value then
 
                 print("Converting Backpack")
@@ -442,7 +508,7 @@ task.spawn(function()
                 playerState.convertingBackpack = true
                 humanoid:Move(Vector3.new(0,0,0))
 
-                goTo(playerHive.SpawnPos.Value , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value)
+                goTo(playerHive.SpawnPos.Value + Vector3.new(0,5,0) , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value)
 
                 task.wait(0.5)
 
@@ -453,9 +519,9 @@ task.spawn(function()
 
                     if player.PlayerGui.ScreenGui.ActivateButton.Position.Y.Offset < -100 then
                         print("Going To Hive")
-                        goTo(playerHive.SpawnPos.Value , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value) 
+                        goTo(playerHive.SpawnPos.Value + Vector3.new(0,5,0) , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value) 
                     end
-                    if player.PlayerGui.ScreenGui.ActivateButton.BackgroundColor3  == Color3.fromRGB(50,131,255) then 
+                    if player.PlayerGui.ScreenGui.ActivateButton.TextBox.Text == "Make Honey" then 
                         print("Toggling Honey Making")
                         playerHiveCommandRE:FireServer("ToggleHoneyMaking") 
                     end
@@ -471,7 +537,7 @@ task.spawn(function()
                 playerState.convertingBackpack = false
 
                 if options.AutoFarmToggle.Value then
-                    goTo(flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value) and flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value).CFrame , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value)
+                    goTo(flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value) and flowerZonesDir:FindFirstChild(options.FlowerSelectDropdown.Value).CFrame + Vector3.new(0,5,0) , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value)
                     print("Returned To Field")
                 end
 
@@ -524,14 +590,20 @@ task.spawn(function()
 
             for _, token in pairs(collectiblesDir:GetChildren()) do
                 if not trackedTokens[token] and not table.find(collectiblesSnapshot, token) and isPointInPart2D(playerField, token.Position) then
-                    
-                    local dist = (token.Position - charPos).Magnitude
 
-                    if dist < tokenDist then
+                    if options.IgnoreHoneyTokens.Value then
+                        
+                        if token.FrontDecal.Texture ~= "rbxassetid://1472135114" then
 
-                        tokenDist = dist
-                        closestToken = token
+                            local dist = (token.Position - charPos).Magnitude
 
+                            if dist < tokenDist then
+
+                                tokenDist = dist
+                                closestToken = token
+
+                            end
+                        end
                     end
                 end
             end
@@ -571,7 +643,6 @@ task.spawn(function()
 
             goTo(CFrame.new(shouldGet.Position), options.SelectedMovementOption.Value)
 
-            local start = tick()
             repeat task.wait() until not shouldGet.Parent
 
             playerState.collectingBubble = false
