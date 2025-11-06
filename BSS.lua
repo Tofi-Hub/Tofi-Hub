@@ -596,7 +596,7 @@ task.spawn(function()
                     task.wait(1) 
 
                     if not options.AutoConvert.Value then return end
-
+                    goTo(playerHive.SpawnPos.Value + Vector3.new(0,10,0) , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value) 
                     if player.PlayerGui.ScreenGui.ActivateButton.Position.Y.Offset < -100 or player.PlayerGui.ScreenGui.ActivateButton.TextBox.Text == "Make Honey" then
                         print("Going To Hive")
                         goTo(playerHive.SpawnPos.Value + Vector3.new(0,10,0) , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value) 
