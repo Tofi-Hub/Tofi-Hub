@@ -5,6 +5,7 @@ It offers seamless support for some of the most popular Roblox games — packed 
 
 ## 🎮 Supported Games
 Tofi Hub currently supports the following titles:
+- 🐝 **Bee Swarm Simulator**
 - 🛶 **Build A Boat For Treasure**
 - 🏀 **Dunk Simulator**
 - ⚔️ **Brace**
