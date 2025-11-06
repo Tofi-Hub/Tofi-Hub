@@ -586,7 +586,7 @@ task.spawn(function()
                 playerState.convertingBackpack = true
                 humanoid:Move(Vector3.new(0,0,0))
 
-                goTo(playerHive.SpawnPos.Value + Vector3.new(0,5,0) , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value)
+                goTo(playerHive.SpawnPos.Value + Vector3.new(0,10,0) , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value)
 
                 task.wait(0.5)
 
@@ -595,15 +595,15 @@ task.spawn(function()
                 repeat
                     task.wait(1) 
 
-                    if player.PlayerGui.ScreenGui.ActivateButton.Position.Y.Offset < -100 then
+                    if not options.AutoConvert.Value then return end
+
+                    if player.PlayerGui.ScreenGui.ActivateButton.Position.Y.Offset < -100 or player.PlayerGui.ScreenGui.ActivateButton.TextBox.Text == "Make Honey" then
                         print("Going To Hive")
-                        goTo(playerHive.SpawnPos.Value + Vector3.new(0,5,0) , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value) 
-                    end
-                    if player.PlayerGui.ScreenGui.ActivateButton.TextBox.Text == "Make Honey" then 
+                        goTo(playerHive.SpawnPos.Value + Vector3.new(0,10,0) , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value) 
                         print("Toggling Honey Making")
                         playerHiveCommandRE:FireServer("ToggleHoneyMaking") 
                     end
-                    
+
                 until coreStats.Pollen.Value == 0
 
                 local balloon = getPlayerBalloon()
