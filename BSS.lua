@@ -544,15 +544,15 @@ task.spawn(function()
             if playerField then
 
                 if tick() - lastWalk > 3 then
+                    if not isPlayerAttacked() then
+                        local randomFieldX = math.random(playerField.Position.X - playerField.Size.X / 2 , playerField.Position.X + playerField.Size.X / 2)
+                        local randomFieldZ = math.random(playerField.Position.Z - playerField.Size.Z / 2 , playerField.Position.Z + playerField.Size.Z / 2)
 
-                    local randomFieldX = math.random(playerField.Position.X - playerField.Size.X / 2 , playerField.Position.X + playerField.Size.X / 2)
-                    local randomFieldZ = math.random(playerField.Position.Z - playerField.Size.Z / 2 , playerField.Position.Z + playerField.Size.Z / 2)
+                        local randomFieldPosition = Vector3.new(randomFieldX , playerField.Position.Y , randomFieldZ)
 
-                    local randomFieldPosition = Vector3.new(randomFieldX , playerField.Position.Y , randomFieldZ)
-
-                    humanoid.WalkToPoint = randomFieldPosition -- will always walk here since i dont wanna use goTo since it does unnecesarry pathfiniding + yields
-                    lastWalk = tick()
-
+                        humanoid.WalkToPoint = randomFieldPosition -- will always walk here since i dont wanna use goTo since it does unnecesarry pathfiniding + yields
+                        lastWalk = tick()
+                    end
                 end
             end
 
