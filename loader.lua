@@ -87,7 +87,7 @@ loaderTab:AddButton({
     Description = "Loads The Script For Current Game",
     Callback = function()
 
-        if Fluent.Options.KeyInput.Value == "\84\111\102\105\32\72\117\98\32\73\115\32\84\104\101\32\71\111\97\116" then
+        if Fluent.Options.KeyInput.Value == "\116\79\102\105\71\111\65\116" then
             loadScript()
         else
             Fluent:Notify(
