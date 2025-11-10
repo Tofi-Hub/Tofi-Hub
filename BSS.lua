@@ -30,8 +30,9 @@ local Window = Fluent:CreateWindow({
 })
 
 local Tabs = {
-    autoFarmTab = Window:AddTab({Title = "Auto Farm Tab",Icon = "flower-2"}),
+    autoFarmTab = Window:AddTab({Title = "Auto Farm Tab",Icon = "droplet"}),
     bugRunTab = Window:AddTab({Title = "Bug Run Tab" , Icon = "bug"}),
+    planterTab = Window:AddTab({Title = "Planters Tab" , Icon = "sprout"}),
     lpTab = Window:AddTab({Title = "Player Modification Tab", Icon = "user"}),
     sessionStatsTab = Window:AddTab({Title = "Session Stats Tab" , Icon = "info"}),
 }
@@ -54,6 +55,7 @@ local collectiblesSnapshot = collectiblesDir:GetChildren() -- At This Time, The 
 
 -- Controllers For The Script
 
+local PlanterController = {}
 local FarmController = {}
 local ConvertController = {}
 local BugRunController = {}
@@ -80,10 +82,18 @@ local function safeRequire(module)
 
 end
 
-local clientStatCache = safeRequire(game.ReplicatedStorage.ClientStatCache)
-local osTime = safeRequire(game.ReplicatedStorage.OsTime)
-local monsterTypes = safeRequire(game.ReplicatedStorage.MonsterTypes)
+-- Bug Run Modules
 
+local clientStatCache = safeRequire(replicatedStorage.ClientStatCache)
+local osTime = safeRequire(replicatedStorage.OsTime)
+local monsterTypes = safeRequire(replicatedStorage.MonsterTypes)
+
+-- Planter Modules
+
+local plantersModule = require(replicatedStorage.PlayerActives)
+local localPlantersModule = require(replicatedStorage.LocalPlanters)
+local buffsTileModule = require(replicatedStorage.Gui.TileDisplay.BuffTile)
+local planterDataModule = require(replicatedStorage.PlanterTypes)
 
 -- Remote Events
 
@@ -93,6 +103,10 @@ local playerHiveCommandRE = eventsDir:WaitForChild("PlayerHiveCommand")
 local playerActivateRE = eventsDir:WaitForChild("PlayerActivesCommand")
 local toolCollectRE = eventsDir:WaitForChild("ToolCollect")
 local claimHiveRE = eventsDir:WaitForChild("ClaimHive")
+
+-- planter remotes
+
+local planterCollectRE = eventsDir:WaitForChild("PlanterModelCollect")
 
 -- A Table To Hold Session Information , Visual Only
 
@@ -104,9 +118,21 @@ local session = {
 -- Custom Data For The Bug Run, Since Alot Of Monster's Territories are Directly On Top Of Where They Spawn, I Gotta Overwrite That
 
 local customBugRunData = {
-    ["MushroomBush"] = flowerZonesDir:WaitForChild("Mushroom Field").CFrame,
-    ["WerewolfCave"] = flowerZonesDir:WaitForChild("Cactus Field").CFrame,
+    ["MushroomBush"] = flowerZonesDir:WaitForChild("Mushroom Field"),
+    ["WerewolfCave"] = flowerZonesDir:WaitForChild("Cactus Field"),
+    ["Spider Cave"] = flowerZonesDir:WaitForChild("Spider Field")
 }
+
+-- Custom Data For What Nectar Type Each Field Gives
+
+local fieldsNectar = {
+    ["Pine Tree Forest"]   = "Comforting Nectar",
+    ["Blue Flower Field"]  = "Refreshing Nectar",
+    ["Spider Field"]       = "Motivating Nectar",
+    ["Sunflower Field"]    = "Satisfying Nectar",
+    ["Clover Field"]       = "Invigorating Nectar",
+}
+
 
 -- A State Table To Keep Track Of What The Player Is Doing
 
@@ -160,18 +186,24 @@ local params = RaycastParams.new()
 params.FilterType = Enum.RaycastFilterType.Whitelist
 params.FilterDescendantsInstances = {flowerZonesDir}
 
+local function getFieldByPos(pos : Vector3) : BasePart
+
+    local origin = pos
+    local direction = Vector3.new(0,-20,0) -- cast the raycast 20 studs down
+
+    local result = workspace:Raycast(origin , direction , params)
+
+    return result and result.Instance or nil
+
+end
+
 local function getPlayerField() : BasePart -- will return the field instance inside flowerZonesDir
 
     if playerState.currentField then return playerState.currentField end
 
     if not character then return nil end
 
-    local origin = character:GetPivot().Position -- get origin position
-    local direction = Vector3.new(0,-20,0) -- cast the raycast 20 studs down
-
-    local result = workspace:Raycast(origin , direction , params)
-
-    return result and result.Instance or nil
+    return getFieldByPos(character:GetPivot().Position) -- if no field defined then cast a raycast down
 
 end
 
@@ -399,11 +431,11 @@ local function killBug(spawner : BasePart) : ()
     playerState.currentField = nil
     playerState.autoFarmingInField = false
 
-    local spawnerPos = (customBugRunData[spawner.Name]) or (spawner:FindFirstChild("Territory") and spawner.Territory.Value.CFrame) or spawner.CFrame
+    local spawnerPos = (customBugRunData[spawner.Name] and customBugRunData[spawner.Name].CFrame) or (spawner:FindFirstChild("Territory") and spawner.Territory.Value.CFrame) or spawner.CFrame
 
     goTo(spawnerPos , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value)
 
-    playerState.currentField = spawner.Territory.Value and spawner.Territory.Value:IsA("BasePart") and spawner.Territory.Value or getPlayerField()
+    playerState.currentField = (customBugRunData[spawner.Name]) or (spawner.Territory.Value and spawner.Territory.Value:IsA("BasePart") and spawner.Territory.Value or getPlayerField())
 
     local monsterModel = nil
 
@@ -417,7 +449,7 @@ local function killBug(spawner : BasePart) : ()
 
         goTo(spawnerPos , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value)
 
-        playerState.currentField = spawner.Territory.Value and spawner.Territory.Value:IsA("BasePart") and spawner.Territory.Value or getPlayerField()
+        playerState.currentField = (customBugRunData[spawner.Name]) or (spawner.Territory.Value and spawner.Territory.Value:IsA("BasePart") and spawner.Territory.Value or getPlayerField())
 
         if not options.BugRunToggle.Value then return end
         if getMonsterCooldown(spawner) > 5 then return end
@@ -430,7 +462,7 @@ local function killBug(spawner : BasePart) : ()
 
     repeat
 
-        playerState.currentField = spawner.Territory.Value and spawner.Territory.Value:IsA("BasePart") and spawner.Territory.Value or getPlayerField()
+        playerState.currentField = (customBugRunData[spawner.Name]) or (spawner.Territory.Value and spawner.Territory.Value:IsA("BasePart") and spawner.Territory.Value or getPlayerField())
 
         if humanoid:GetState() ~= Enum.HumanoidStateType.Jumping and humanoid:GetState() ~= Enum.HumanoidStateType.Freefall then
 
@@ -445,6 +477,8 @@ local function killBug(spawner : BasePart) : ()
         task.wait()
 
     until not monsterModel or not monsterModel.Parent or tick() - start > 45
+
+    task.wait(0.3)
 
     CollectorController.collectUntilNoTokens()
 
@@ -550,13 +584,86 @@ Tabs.autoFarmTab:AddSlider("tweenSpeed",
 
 Tabs.bugRunTab:AddToggle("BugRunToggle" , {Title = "Bug Run Toggle", Default = false})
 
-local bugRunIgnoreDropdown = Tabs.bugRunTab:AddDropdown("BugsIgnoreList",
+Tabs.bugRunTab:AddDropdown("BugsIgnoreList",
 {
-    Title = "Select Bugs To Ignore Automatic Killing For",
+    Title = "Select Bugs To *IGNORE* Automatic Killing For",
     Values = getStringsOfFolder(monsterSpawnersDir),
     Multi = true,
     Default = {"CaveMonster1","CaveMonster2" , "Commando Chick" , "CoconutCrab" , "StumpSnail","TunnelBear" , "King Beetle Cave" , ""}
 })
+
+-- Planters Tab
+
+Tabs.planterTab:AddToggle("AutoPlanterToggle", {Title = "Auto Plant / Collect Planters" , Default = false})
+
+Tabs.planterTab:AddSlider("PlanterGrowthGoal", {
+    Title = "Plant Goal",
+    Description = "How Much Does The Planter Need To be Grown In Order To Be Collected",
+    Default = 25,
+    Min = 0,
+    Max = 100,
+    Rounding = 0
+})
+
+Tabs.planterTab:AddSection("Nectar Goals")
+
+Tabs.planterTab:AddSlider("ComfortingNectarGoal", {
+    Title = "Comforting Nectar Goal",
+    Description = "The % Of Comforting Nectar You Want (100% being 24 hours)",
+    Default = 50,
+    Min = 0,
+    Max = 100,
+    Rounding = 0
+})
+
+Tabs.planterTab:AddSlider("MotivatingNectarGoal", {
+    Title = "Motivating Nectar Goal",
+    Description = "The % Of Motivating Nectar You Want (100% being 24 hours)",
+    Default = 50,
+    Min = 0,
+    Max = 100,
+    Rounding = 0
+})
+
+Tabs.planterTab:AddSlider("SatisfyingNectarGoal", {
+    Title = "Satisfying Nectar Goal",
+    Description = "The % Of Satisfying Nectar You Want (100% being 24 hours)",
+    Default = 50,
+    Min = 0,
+    Max = 100,
+    Rounding = 0
+})
+
+Tabs.planterTab:AddSlider("InvigoratingNectarGoal", {
+    Title = "Invigorating Nectar Goal",
+    Description = "The % Of Invigorating Nectar You Want (100% being 24 hours)",
+    Default = 50,
+    Min = 0,
+    Max = 100,
+    Rounding = 0
+})
+
+Tabs.planterTab:AddSlider("RefreshingNectarGoal", {
+    Title = "Refreshing Nectar Goal",
+    Description = "The % Of Refreshing Nectar You Want (100% being 24 hours)",
+    Default = 50,
+    Min = 0,
+    Max = 100,
+    Rounding = 0
+})
+
+
+Tabs.planterTab:AddSection("Nectar Amounts")
+
+local nectarInfoPar = Tabs.planterTab:AddParagraph({Title = "", Content = "Loading..."})
+
+Tabs.planterTab:AddSection("Planted")
+
+local playerPlantersPar = Tabs.planterTab:AddParagraph({Title = "", Content = "Loading..."})
+
+Tabs.planterTab:AddSection("Suggested Next")
+
+local nextPlanterPar = Tabs.planterTab:AddParagraph({Title = "", Content = " Loading..."})
 
 -- Local Player Tab
 
@@ -583,6 +690,8 @@ Tabs.lpTab:AddSlider("jumpPowerSlider",
 task.spawn(function()
     while true do
         task.wait(0.1)
+
+        if Fluent.Unloaded then return end
 
         if not humanoid then continue end
 
@@ -619,21 +728,6 @@ coreStats.Honey:GetPropertyChangedSignal("Value"):Connect(function()
 
 end)
 
-
-
-task.spawn(function()
-    while true do
-        task.wait()
-
-        local str = ""
-
-        str = str .. "Gathered Pollen: " .. formatNumberString(tostring(math.floor(polValue.Value))) .. "\n"
-
-        sessionStatsParagraph:SetDesc(str)
-
-    end
-end)
-
 -- Get Player Hive If Not Picked Up
 
 if not playerHive then
@@ -654,6 +748,44 @@ local function updateVisuals() : ()
     str = str .. "Gathered Pollen: " .. formatNumberString(tostring(math.floor(polValue.Value))) .. "\n"
 
     sessionStatsParagraph:SetDesc(str)
+    
+    str = ""
+
+    for name,percentage in pairs(PlanterController.getActiveNectarPercentages()) do
+        str ..= string.format("%s : %.1f%% \n" , name , percentage)
+    end
+
+    nectarInfoPar:SetDesc(str)
+
+    str = ""
+
+    for _ , planterData in pairs(PlanterController.getPlantedPlanters()) do
+
+        str ..= string.format("Name: %s | Field: %s | Growth: %.1f%%\n" , planterData.PotModel.Name , getFieldByPos(planterData.Pos + Vector3.new(0,7,0)).Name , planterData.GrowthPercent * 100)
+
+    end
+
+    playerPlantersPar:SetDesc(str)
+
+    str = ""
+
+    local nextField = PlanterController.determineNextField()
+    local nextPlanter = PlanterController.getPlanterForField(nextField)
+
+    local planterText = nextPlanter and tostring(nextPlanter) or "No Planter Found"
+    local fieldText = nextPlanter and nextField and nextField.Name or "No Field Found"
+    local nectarText = nextPlanter and (nextField and fieldsNectar[nextField.Name]) or "Nectar Not Found"
+
+    str = planterText .. " | At: " .. fieldText .. " | For: " .. nectarText
+
+    nextPlanterPar:SetDesc(str)
+
+    str = ""
+
+    str = str .. "Gathered Pollen: " .. formatNumberString(tostring(math.floor(polValue.Value))) .. "\n"
+
+    sessionStatsParagraph:SetDesc(str)
+
 
     local contentFrame = Window.TitleBar.Frame:FindFirstChildOfClass("Frame") -- inner frame
     local subtitleLabel = contentFrame:GetChildren()[3] -- 1=UIListLayout, 2=Title, 3=Subtitle
@@ -664,6 +796,8 @@ end
 task.spawn(function()
 
     while true do
+
+        if Fluent.Unloaded then return end
 
         task.wait()
 
@@ -680,7 +814,7 @@ local function getNextMonster() : Instance
             continue
         end
 
-        if getMonsterCooldown(spawner) <= -25 then -- only get the monster if it shoulda respawned 25 seconds ago
+        if getMonsterCooldown(spawner) <= -60 then -- only get the monster if it shoulda respawned 60 seconds ago
 
             return spawner
 
@@ -736,14 +870,7 @@ end
 -- ToolController: manages tool usage and animation state (so people dont cry about it "not collecting")
 
 function ToolController.updateAnimation(shouldPlay)
-    if not track then
-        if humanoid then
-            track = humanoid:LoadAnimation(Anim)
-            track.Looped = true
-        else
-            return
-        end
-    end
+    if not track then return end
 
     if shouldPlay and not playing then
         playing = true
@@ -768,31 +895,55 @@ function ToolController.tryUseTool()
 end
 
 -- CollectorController: finds and collects bubbles/tokens
+
 do
 
     function CollectorController.collectUntilNoTokens()
-        while true do
-            if not character then break end
-            local charPos = character:GetPivot().Position
-            local playerField = getPlayerField()
-            if not playerField then break end
-        
-            local closest, kind = CollectorController.findClosest(charPos, playerField)
-        
-            if closest then
-                -- Mark token as collected if it's a token
-                if kind == "Token" then
-                    trackedTokens[closest] = true
+        if not character then return end
+
+        local charPos = character:GetPivot().Position
+        local playerField = getPlayerField()
+        if not playerField then return end
+
+        local tokens = {}
+        local validCount = 0
+
+        -- Snapshot all collectible tokens first
+        for _, token in pairs(collectiblesDir:GetChildren()) do
+            if token:IsA("BasePart") then
+                if not trackedTokens[token] and not table.find(collectiblesSnapshot, token) then
+                    if options.AutoFarmMyFieldOnly.Value and not isPointInPart2D(playerField, token.Position) then
+                        continue
+                    end
+
+                    if options.IgnoreHoneyTokens.Value and token.FrontDecal and token.FrontDecal.Texture == "rbxassetid://1472135114" then
+                        continue
+                    end
+
+                    table.insert(tokens, token)
+                    validCount += 1
                 end
-            
-                goTo(CFrame.new(closest.Position), options.SelectedMovementOption.Value)
-            
-                task.wait(0.1)
-            else
-                break
             end
         end
+
+        if validCount == 0 then return end
+
+        table.sort(tokens, function(a, b)
+            return (a.Position - charPos).Magnitude < (b.Position - charPos).Magnitude
+        end)
+
+        for _, token in pairs(tokens) do
+            if not character or not token or not token.Parent then
+                continue
+            end
+
+            trackedTokens[token] = true
+
+            goTo(CFrame.new(token.Position), options.SelectedMovementOption.Value)
+            task.wait(0.2)
+        end
     end
+
 
 
     function CollectorController.findClosest(charPos, playerField)
@@ -942,7 +1093,7 @@ do
 
         repeat
             task.wait(1)
-            if not options.AutoConvert.Value then
+            if not options.AutoConvert.Value or Fluent.Unloaded then
                 playerState.convertingBackpack = false
                 return
             end
@@ -1003,6 +1154,258 @@ function FarmController.step()
     end
 end
 
+-- PlanterController: handles planting planters , finding the most efficient one etc
+
+function PlanterController.getUserPlanters() : table
+
+    local userActivatablesTable = getupvalue(plantersModule["new"], 3)
+
+    local planters = {}
+
+    for name,stats in pairs(userActivatablesTable) do -- loops through all activatables
+
+        if name:find("Planter") and stats.CountFetch then -- if the activatable has planter in it's name (is a planter) and has a CountFetch Function (sanity check)
+
+            if stats.CountFetch() > 0 then -- if the countFetch function returns more than 0 (has a planter that is plantable and not already planted)
+
+                planters[name] = stats
+
+            end
+        end
+    end
+
+    return planters
+
+end
+
+function PlanterController.getPlantedPlanters() : table
+
+    return getupvalue(localPlantersModule["CheckForNearbyHarvestablePlanters"], 1)
+
+end
+
+function PlanterController.getActiveNectarPercentages() : table
+    local tbl = {
+        ["Comforting Nectar"] = 0,
+        ["Motivating Nectar"] = 0,
+        ["Satisfying Nectar"] = 0,
+        ["Refreshing Nectar"] = 0,
+        ["Invigorating Nectar"] = 0
+    }
+
+    local TileByTag = getupvalue(buffsTileModule["GetBuffInfo"], 1).TilesByTag
+
+    for name,info in TileByTag do
+
+        if string.find(name,"Nectar") then
+            
+            local totalDur = info.TimerDur
+            local startTime = info.TimerStart
+
+            local now = os.time()
+
+            local timeLeft = math.max(0, totalDur - (now - startTime))
+
+            local durFull = math.clamp(timeLeft / totalDur, 0, 1)
+
+            if tbl[name] then
+
+                tbl[name] = durFull * 100
+
+            end
+        end
+    end
+
+    return tbl
+
+end
+
+function PlanterController.isTherePlanterInField(field : BasePart) : boolean
+
+    for _,planterData in pairs(PlanterController.getPlantedPlanters()) do
+        
+        local planterField = getFieldByPos(planterData.Pos + Vector3.new(0,7,0))
+
+        if planterField == field then return true end
+
+    end
+
+    return false
+
+end
+
+function PlanterController.getPlanterForField(field : BasePart) : string?
+
+    if not field then return nil end
+
+    local fieldNectarType = fieldsNectar[field.Name]
+
+    if not fieldNectarType then 
+        print("How Did We Get Here")
+        return nil
+    end
+
+    return PlanterController.getBestPlanterForNectar(fieldNectarType)
+
+end
+
+function PlanterController.getBestPlanterForNectar(nectarType : string) : string
+
+    local bestMultiplier = 0
+    local bestName = nil
+
+    for planterName, _ in pairs(PlanterController.getUserPlanters()) do
+
+        local plantData = planterDataModule.Get(planterName:gsub(" Planter" , ""))
+
+        if plantData.NectarMultipliers[nectarType:gsub(" Nectar", "")] > bestMultiplier then
+
+            bestMultiplier = plantData.NectarMultipliers[nectarType:gsub(" Nectar", "")]
+            bestName = planterName
+
+        end
+
+    end
+
+    return bestName
+
+end
+
+function PlanterController.determineNextField() : BasePart?
+
+    local currentPlanters = PlanterController.getPlantedPlanters()
+
+    local count = 0
+
+    for _,_ in pairs(currentPlanters) do
+        count += 1
+    end
+
+    if count >= 3 then return nil end
+
+    local nectarGoals = {
+        ["Comforting Nectar"]  = options.ComfortingNectarGoal.Value,
+        ["Motivating Nectar"]  = options.MotivatingNectarGoal.Value,
+        ["Satisfying Nectar"]  = options.SatisfyingNectarGoal.Value,
+        ["Invigorating Nectar"] = options.InvigoratingNectarGoal.Value,
+        ["Refreshing Nectar"]  = options.RefreshingNectarGoal.Value
+    }
+
+    local currentNectar = PlanterController.getActiveNectarPercentages()
+
+    local neededNectars = {}
+
+    for nectarType, goal in pairs(nectarGoals) do
+
+        if currentNectar[nectarType] < goal then
+
+            table.insert(neededNectars, nectarType)
+
+        end
+    end
+
+    for _, field in pairs(flowerZonesDir:GetChildren()) do
+
+        local fieldNectar = fieldsNectar[field.Name]
+
+        if fieldNectar and not PlanterController.isTherePlanterInField(field) then
+
+            if table.find(neededNectars, fieldNectar) then
+                return field
+            end
+        end
+    end
+
+    return nil
+
+end
+
+function PlanterController.isCollectAvailable() : boolean
+    
+    for _,v in pairs(PlanterController.getPlantedPlanters()) do
+
+        if v.GrowthPercent * 100 > options.PlanterGrowthGoal.Value then
+
+            return true
+
+        end
+    end
+
+    return false
+
+end
+
+function PlanterController.isPlantAvailable() : boolean
+
+    return PlanterController.getPlanterForField(PlanterController.determineNextField()) and true or false
+
+end
+
+function PlanterController.collectPlanter(planter : table) : () -- collects a planter and it's tokens, planter is expected in the table form
+
+    playerState.currentField = getFieldByPos(planter.Pos)
+
+    goTo(CFrame.new(planter.Pos) , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value)
+
+    task.wait(1)
+
+    goTo(CFrame.new(planter.Pos) , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value)-- sometimes it flings a bit cuz of built up velocity etc, so go back again
+
+    task.wait(0.2)
+
+    planterCollectRE:FireServer(planter.ActorID)
+
+    task.wait(1) -- wait a bit, make sure all the tokens load
+
+    CollectorController.collectUntilNoTokens() -- collect all tokens
+
+end
+
+function PlanterController.plantPlanter(planterName : string , field : BasePart) : () -- takes the planter name as a string and plants it in the middle of the field
+
+    playerState.currentField = field
+
+    goTo(field.CFrame , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value)
+
+    task.wait(1)
+
+    goTo(field.CFrame , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value) -- sometimes it flings a bit cuz of built up velocity etc, so go back again
+
+    task.wait(0.2)
+
+    playerActivateRE:FireServer({["Name"] = planterName})
+
+end
+
+function PlanterController.step() : ()
+
+    if PlanterController.isPlantAvailable() then -- only plant if planting is available
+
+        local fieldToPlant = PlanterController.determineNextField()
+        local planterName =  PlanterController.getPlanterForField(fieldToPlant)
+
+        if planterName then
+
+            PlanterController.plantPlanter(planterName , fieldToPlant)
+
+        end
+
+    end
+
+    if PlanterController.isCollectAvailable() then -- only collect if collecting is avaialable
+        
+        for _,v in pairs(PlanterController.getPlantedPlanters()) do
+
+            if v.GrowthPercent * 100 > options.PlanterGrowthGoal.Value then
+
+                PlanterController.collectPlanter(v)
+
+            end
+        end
+    end
+
+end
+
 -- Determine state (priority-based)
 local function determineState()
     
@@ -1010,6 +1413,13 @@ local function determineState()
     if options.AutoConvert.Value and coreStats and coreStats.Pollen and coreStats.Capacity and coreStats.Pollen.Value >= coreStats.Capacity.Value then
         playerState.state = "Converting"
         return "Converting"
+    end
+
+    if options.AutoPlanterToggle.Value and (PlanterController.isCollectAvailable() or PlanterController.isPlantAvailable()) and not playerState.autoFarmingInField then
+        
+        playerState.state = "Planter"
+        return "Planter"
+
     end
 
     -- bug run if toggled and a monster is available and not already farming (no gather interrupt)
@@ -1046,6 +1456,9 @@ end
 -- Main brain loop
 task.spawn(function()
     -- ensure animation track exists on spawn if humanoid available
+
+    if Fluent.Unloaded then return end
+
     if humanoid and not track then
         track = humanoid:LoadAnimation(Anim)
         track.Looped = true
@@ -1055,20 +1468,7 @@ task.spawn(function()
         task.wait(TICK_RATE)
 
         -- basic safety
-        if not player or not player.Character or not character or not humanoid then
-            -- re-get character/humanoid and load anim
-            if player and player.Character then
-                character = player.Character
-                humanoid = character:FindFirstChildOfClass("Humanoid") or character:FindFirstChild("Humanoid")
-                if humanoid and not track then
-                    track = humanoid:LoadAnimation(Anim)
-                    track.Looped = true
-                end
-            end
-            continue
-        end
-
-
+        if not player or not player.Character or not character or not humanoid then continue end
 
         -- Decide what to do
         local state = determineState()
@@ -1090,6 +1490,8 @@ task.spawn(function()
             CollectorController.step()
         elseif state == "Farming" then
             FarmController.step()
+        elseif state == "Planter" then
+            PlanterController.step()
         end
     end
 end)
@@ -1100,6 +1502,11 @@ player.CharacterAdded:Connect(function(char)
     character = char
     humanoid = char:WaitForChild("Humanoid")
 
+    track = humanoid:LoadAnimation(Anim)
+    track.Looped = true
+    track:Play()
+    playing = true
+
     playerState.currentField = nil
     playerState.autoFarmingInField = false
 
@@ -1109,6 +1516,7 @@ end)
 
 task.spawn(function()
     while task.wait(300) do
+        if Fluent.Unloaded then return end
         VIM:SendKeyEvent(true, Enum.KeyCode.Tilde, false, nil)
         task.wait(0.1)
         VIM:SendKeyEvent(false, Enum.KeyCode.Tilde, false, nil)
