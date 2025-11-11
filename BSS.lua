@@ -33,6 +33,7 @@ local Tabs = {
     autoFarmTab = Window:AddTab({Title = "Auto Farm Tab",Icon = "droplet"}),
     bugRunTab = Window:AddTab({Title = "Bug Run Tab" , Icon = "bug"}),
     planterTab = Window:AddTab({Title = "Planters Tab" , Icon = "sprout"}),
+    toysTab = Window:AddTab({Title = "Interactables Tab" , Icon = "wand"}),
     lpTab = Window:AddTab({Title = "Player Modification Tab", Icon = "user"}),
     sessionStatsTab = Window:AddTab({Title = "Session Stats Tab" , Icon = "info"}),
 }
@@ -48,6 +49,7 @@ local hivesDir = workspace:WaitForChild("Honeycombs")
 local hiveBalloonsDir = workspace:WaitForChild("Balloons"):WaitForChild("HiveBalloons")
 local monsterSpawnersDir = workspace:WaitForChild("MonsterSpawners")
 local coreStats = player:WaitForChild("CoreStats")
+local toysDir = workspace:WaitForChild("Toys")
 
 local collectiblesDir = workspace:WaitForChild("Collectibles")
 
@@ -55,6 +57,7 @@ local collectiblesSnapshot = collectiblesDir:GetChildren() -- At This Time, The 
 
 -- Controllers For The Script
 
+local ToyController = {}
 local PlanterController = {}
 local FarmController = {}
 local ConvertController = {}
@@ -88,12 +91,15 @@ local clientStatCache = safeRequire(replicatedStorage.ClientStatCache)
 local osTime = safeRequire(replicatedStorage.OsTime)
 local monsterTypes = safeRequire(replicatedStorage.MonsterTypes)
 
+
 -- Planter Modules
 
-local plantersModule = require(replicatedStorage.PlayerActives)
-local localPlantersModule = require(replicatedStorage.LocalPlanters)
-local buffsTileModule = require(replicatedStorage.Gui.TileDisplay.BuffTile)
-local planterDataModule = require(replicatedStorage.PlanterTypes)
+local plantersModule = safeRequire(replicatedStorage.PlayerActives)
+local localPlantersModule = safeRequire(replicatedStorage.LocalPlanters)
+local buffsTileModule = safeRequire(replicatedStorage.Gui.TileDisplay.BuffTile)
+local planterDataModule = safeRequire(replicatedStorage.PlanterTypes)
+
+local statTools = safeRequire(replicatedStorage.StatTools)
 
 -- Remote Events
 
@@ -103,6 +109,7 @@ local playerHiveCommandRE = eventsDir:WaitForChild("PlayerHiveCommand")
 local playerActivateRE = eventsDir:WaitForChild("PlayerActivesCommand")
 local toolCollectRE = eventsDir:WaitForChild("ToolCollect")
 local claimHiveRE = eventsDir:WaitForChild("ClaimHive")
+local claimToyRE = eventsDir:WaitForChild("ToyEvent")
 
 -- planter remotes
 
@@ -212,7 +219,9 @@ local function getStringsOfFolder(folder : Folder) : table
     local toReturn = {}
 
     for _,child in pairs(folder:GetChildren()) do
+
         table.insert(toReturn,child.Name)
+
     end
 
     return toReturn
@@ -506,11 +515,17 @@ local function formatNumberString(numString : string) : string
     return str
 end
 
+local function getToys() : table
+
+    return {"Wealth Clock" , "Blueberry Dispenser" , "Strawberry Dispenser" , "Field Booster" , "Blue Field Booster" , "Red Field Booster"}
+
+end
+
 -- GUI
 
 -- Auto Farm Tab
 
-local autoFarmToggle = Tabs.autoFarmTab:AddToggle("AutoFarmToggle",{Title = "Auto Farm Toggle" , Default = false})
+Tabs.autoFarmTab:AddToggle("AutoFarmToggle",{Title = "Auto Farm Toggle" , Default = false})
 
 local flowerFieldsDropdown
 
@@ -673,6 +688,16 @@ local playerPlantersPar = Tabs.planterTab:AddParagraph({Title = "", Content = "L
 Tabs.planterTab:AddSection("Suggested Next")
 
 local nextPlanterPar = Tabs.planterTab:AddParagraph({Title = "", Content = " Loading..."})
+
+-- Toys / Interactables Tab
+
+Tabs.toysTab:AddDropdown("ChosenInteractables",
+{
+    Title = "Select Interactables To Auto Collect",
+    Values = getToys(),
+    Multi = true,
+    Default = {}
+})
 
 -- Local Player Tab
 
@@ -1425,6 +1450,100 @@ function PlanterController.step() : ()
 
 end
 
+-- ToyController : Handles Toy Collect Like Tickets Dispenser , Blueberry Dispenser ETC..
+
+function ToyController.getCooldown(toyName: string): number
+
+    local clientStats = clientStatCache:Get()
+
+    if not clientStats then return 0 end
+
+    local toyTimes = clientStats.ToyTimes or {}
+    local toyPlaytimes = clientStats.ToyPlaytimes or {}
+    local toy = toysDir:FindFirstChild(toyName)
+
+    if not toy then return 0 end
+
+    local currentTime = math.floor(osTime())
+    local remaining = 0
+
+    if toy:FindFirstChild("Cooldown") then
+
+        local lastUsed = toyTimes[toy.Name] or 0
+        local cooldown = toy.Cooldown.Value
+
+        remaining = math.max(cooldown - (currentTime - lastUsed), remaining)
+
+    end
+
+    if toy:FindFirstChild("PlaytimeCooldown") then
+
+        local lastPlaytime = toyPlaytimes[toy.Name] or 0
+        local totalPlaytime = statTools.GetTotalPlaytime(clientStats) or 0
+        local playtimeCooldown = toy.PlaytimeCooldown.Value
+
+        remaining = math.max(playtimeCooldown - (totalPlaytime - lastPlaytime), remaining)
+
+    end
+
+    return remaining
+end
+
+
+
+function ToyController.getNextToy() : (string , Model) -- basepart (platform) and string (type)
+
+    for toyName , _ in pairs(options.ChosenInteractables.Value) do
+        
+        if toysDir:FindFirstChild(toyName) then
+            
+            local cd = ToyController.getCooldown(toyName)
+
+            if cd <= 0 then
+                
+                return toyName , toysDir[toyName]
+
+            end
+
+        else
+            warn("Toy Not Found In Toys Dir: " .. toyName)
+        end
+
+    end
+
+    return nil
+
+end
+
+function ToyController.collectToy(toyName : string , toyModel : Model) : ()
+
+    if not toyModel:FindFirstChild("Platform") then print("Attempted To Collect Toy Without A Platform, Toy Name: " .. toyName) return end
+
+    goTo(toyModel.Platform.CFrame + Vector3.new(0,2,0) , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value)
+
+    task.wait(1)
+
+    goTo(toyModel.Platform.CFrame + Vector3.new(0,2,0) , options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value)
+
+    task.wait(0.2)
+
+
+    claimToyRE:FireServer(toyName)
+
+end
+
+function ToyController.step()
+
+    local nextToy , nextToyModel = ToyController.getNextToy()
+
+    if nextToy then
+
+        ToyController.collectToy(nextToy , nextToyModel)
+
+    end
+
+end
+
 -- Determine state (priority-based)
 local function determineState()
     
@@ -1434,16 +1553,27 @@ local function determineState()
         return "Converting"
     end
 
+    -- planters are 2nd priority, theyre pretty important
+
     if options.AutoPlanterToggle.Value and (PlanterController.isCollectAvailable() or PlanterController.isPlantAvailable()) and not playerState.autoFarmingInField then
         
-        playerState.state = "Planter"
+        playerState.state = PlanterController.isCollectAvailable() and "Collecting" or "Planting" .. " Planter: " .. PlanterController.getPlanterForField(PlanterController.determineNextField())
         return "Planter"
+
+    end
+
+    -- collectibles up next, stuff like ticket dispenser , bluberry dispenser etc are pretty important
+
+    if not playerState.autoFarmingInField and ToyController.getNextToy() then
+        
+        playerState.state = "Collecting Toy: " .. ToyController.getNextToy()
+        return "ToyCollection"
 
     end
 
     -- bug run if toggled and a monster is available and not already farming (no gather interrupt)
     if options.BugRunToggle.Value and getNextMonster() and not playerState.autoFarmingInField then
-        playerState.state = "BugRun"
+        playerState.state = "Bug Run Killing: " .. getNextMonster().Name
         return "BugRun"
     end
 
@@ -1466,7 +1596,7 @@ local function determineState()
         return "Farming"
     end
 
-    playerState.state = "Idle" -- doing nothing
+    playerState.state = "Idling" -- doing nothing
 
     return "Idle"
 
@@ -1512,6 +1642,8 @@ task.spawn(function()
             FarmController.step()
         elseif state == "Planter" then
             PlanterController.step()
+        elseif state == "ToyCollection" then
+            ToyController.step()
         end
     end
 end)
