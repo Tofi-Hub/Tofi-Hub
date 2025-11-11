@@ -596,13 +596,22 @@ Tabs.bugRunTab:AddDropdown("BugsIgnoreList",
 
 Tabs.planterTab:AddToggle("AutoPlanterToggle", {Title = "Auto Plant / Collect Planters" , Default = false})
 
-Tabs.planterTab:AddSlider("PlanterGrowthGoal", {
-    Title = "Plant Goal",
+Tabs.planterTab:AddSlider("PlanterGrowthPercentGoal", {
+    Title = "Planter Percent Goal",
     Description = "How Much Does The Planter Need To be Grown In Order To Be Collected",
     Default = 25,
     Min = 0,
     Max = 100,
-    Rounding = 0
+    Rounding = 0,
+})
+
+Tabs.planterTab:AddSlider("PlanterGrowthTimeGoal", {
+    Title = "Planter Time Goal",
+    Description = "How Many Hours Does The Planter Need Planted Before Collection",
+    Default = 3,
+    Min = 1,
+    Max = 12,
+    Rounding = 1,
 })
 
 Tabs.planterTab:AddSection("Nectar Goals")
@@ -691,7 +700,7 @@ task.spawn(function()
     while true do
         task.wait(0.1)
 
-        if Fluent.Unloaded then return end
+        if Fluent.Unloaded then break end
 
         if not humanoid then continue end
 
@@ -776,7 +785,7 @@ local function updateVisuals() : ()
     local fieldText = nextPlanter and nextField and nextField.Name or "No Field Found"
     local nectarText = nextPlanter and (nextField and fieldsNectar[nextField.Name]) or "Nectar Not Found"
 
-    str = planterText .. " | At: " .. fieldText .. " | For: " .. nectarText
+    str = "Planter: " .. planterText .. " | Field: " .. fieldText .. " | Nectar: " .. nectarText
 
     nextPlanterPar:SetDesc(str)
 
@@ -788,8 +797,10 @@ local function updateVisuals() : ()
 
 
     local contentFrame = Window.TitleBar.Frame:FindFirstChildOfClass("Frame") -- inner frame
-    local subtitleLabel = contentFrame:GetChildren()[3] -- 1=UIListLayout, 2=Title, 3=Subtitle
-    subtitleLabel.Text = "by @dandush on discord | STATE: " .. playerState.state
+    if contentFrame then
+        local subtitleLabel = contentFrame:GetChildren()[3] -- 1=UIListLayout, 2=Title, 3=Subtitle
+        subtitleLabel.Text = "by @dandush on discord | STATE: " .. playerState.state
+    end
 
 end
 
@@ -797,7 +808,7 @@ task.spawn(function()
 
     while true do
 
-        if Fluent.Unloaded then return end
+        if Fluent.Unloaded then break end
 
         task.wait()
 
@@ -1166,7 +1177,7 @@ function PlanterController.getUserPlanters() : table
 
         if name:find("Planter") and stats.CountFetch then -- if the activatable has planter in it's name (is a planter) and has a CountFetch Function (sanity check)
 
-            if stats.CountFetch() > 0 then -- if the countFetch function returns more than 0 (has a planter that is plantable and not already planted)
+            if stats.CountFetch() == 1 then -- if the countFetch function returns 1 (since i dont want it to break for planters that have more than 1 capcity and i am way tooo lazy to make it check in the planted fields for the planter)
 
                 planters[name] = stats
 
@@ -1240,13 +1251,17 @@ function PlanterController.getPlanterForField(field : BasePart) : string?
 
     local fieldNectarType = fieldsNectar[field.Name]
 
-    if not fieldNectarType then 
+    if not fieldNectarType then
         print("How Did We Get Here")
         return nil
     end
 
     return PlanterController.getBestPlanterForNectar(fieldNectarType)
 
+end
+
+function PlanterController.getPlanterData(planterName : string) : table
+    return planterDataModule.Get(planterName:gsub(" Planter" , ""))
 end
 
 function PlanterController.getBestPlanterForNectar(nectarType : string) : string
@@ -1258,7 +1273,11 @@ function PlanterController.getBestPlanterForNectar(nectarType : string) : string
 
         local plantData = planterDataModule.Get(planterName:gsub(" Planter" , ""))
 
-        if plantData.NectarMultipliers[nectarType:gsub(" Nectar", "")] > bestMultiplier then
+        if not plantData or not plantData.NectarMultipliers[nectarType:gsub(" Nectar", "")] then
+            print("Failed To Get Plant Data / Nectar Boost Data For: " .. planterName .. "Tried Getting Nectar: " .. nectarType:gsub(" Nectar", "") .. " Or Planter: " .. planterName:gsub(" Planter" , ""))
+        end
+
+        if plantData.NectarMultipliers[nectarType:gsub(" Nectar", "")] or 1 > bestMultiplier then
 
             bestMultiplier = plantData.NectarMultipliers[nectarType:gsub(" Nectar", "")]
             bestName = planterName
@@ -1321,10 +1340,10 @@ function PlanterController.determineNextField() : BasePart?
 end
 
 function PlanterController.isCollectAvailable() : boolean
-    
+
     for _,v in pairs(PlanterController.getPlantedPlanters()) do
 
-        if v.GrowthPercent * 100 > options.PlanterGrowthGoal.Value then
+        if (v.GrowthPercent * 100 > options.PlanterGrowthPercentGoal.Value) or (v.GrowthPercent * PlanterController.getPlanterData(v.PotModel.Name).MaxGrowth / 3600 --[[in hours]]) > tonumber(options.PlanterGrowthTimeGoal.Value) then
 
             return true
 
@@ -1396,7 +1415,7 @@ function PlanterController.step() : ()
         
         for _,v in pairs(PlanterController.getPlantedPlanters()) do
 
-            if v.GrowthPercent * 100 > options.PlanterGrowthGoal.Value then
+            if (v.GrowthPercent * 100 > options.PlanterGrowthPercentGoal.Value) or (v.GrowthPercent * PlanterController.getPlanterData(v.PotModel.Name).MaxGrowth / 3600 --[[in hours]]) > tonumber(options.PlanterGrowthTimeGoal.Value) then
 
                 PlanterController.collectPlanter(v)
 
@@ -1457,14 +1476,15 @@ end
 task.spawn(function()
     -- ensure animation track exists on spawn if humanoid available
 
-    if Fluent.Unloaded then return end
-
     if humanoid and not track then
         track = humanoid:LoadAnimation(Anim)
         track.Looped = true
     end
 
     while true do
+
+        if Fluent.Unloaded then break end
+
         task.wait(TICK_RATE)
 
         -- basic safety
@@ -1516,7 +1536,7 @@ end)
 
 task.spawn(function()
     while task.wait(300) do
-        if Fluent.Unloaded then return end
+        if Fluent.Unloaded then break end
         VIM:SendKeyEvent(true, Enum.KeyCode.Tilde, false, nil)
         task.wait(0.1)
         VIM:SendKeyEvent(false, Enum.KeyCode.Tilde, false, nil)
