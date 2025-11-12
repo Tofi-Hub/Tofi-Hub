@@ -81,13 +81,25 @@ local function loadScript() : ()
     end
 end
 
+local reqFunc = request or http_request
+
+local data = {["game_name"] = gameName}
+
+local response = reqFunc({
+    Url = "https://tofi-hub-worker.dandushyt.workers.dev/getkey",
+    Method = "POST",
+    Headers = {["Content-Type"] = "application/json"},
+    Body = game:GetService("HttpService"):JSONEncode(data),
+})
+
+local key = game:GetService("HttpService"):JSONDecode(response.Body).key
 
 loaderTab:AddButton({
     Title = "Load",
     Description = "Loads The Script For Current Game",
     Callback = function()
 
-        if Fluent.Options.KeyInput.Value == "\116\79\102\105\71\111\65\116" then
+        if Fluent.Options.KeyInput.Value == key then
             loadScript()
         else
             Fluent:Notify(
@@ -107,7 +119,7 @@ loaderTab:AddSection("Info")
 
 local par = loaderTab:AddParagraph({
     Title = "Instructions To Load Tofi Hub:",
-    Description = "Either Join The Discord And Get The PERMENANT Key From The \"Tofi Hub Key\" Channel Or Wait " ..  300 - math.floor(tick() - start) .." Seconds"
+    Description = "Either Join The Discord And Get The PERMENANT Key From The \"Tofi Hub Key\" Channel Or Wait " ..  600 - math.floor(tick() - start) .." Seconds"
 })
 
 loaderTab:AddButton({
@@ -126,9 +138,9 @@ loaderTab:AddButton({
 
 
 
-while tick() - start < 300 do
+while tick() - start < 600 do
     task.wait()
-    par:SetDesc("Either Join The Discord And Get The PERMENANT Key From The \"Tofi Hub Key\" Channel Or Wait " ..  300 - math.floor(tick() - start) .." Seconds")
+    par:SetDesc("Either Join The Discord And Get The PERMENANT Key From The \"Tofi Hub Key\" Channel Or Wait " .. 600  - math.floor(tick() - start) .." Seconds")
 end
 
 if not Fluent.Unloaded then
