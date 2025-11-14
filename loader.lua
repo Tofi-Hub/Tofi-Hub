@@ -1,3 +1,5 @@
+-- THIS SCRIPT WAS NOT MEANT TO BE SECURE OR ANYTHING, I JUST WANT MORE PEOPLE IN MY DISCORD SERVER, THE KEY WILL NEVER CHANGE , PLEASE JUST JOIN MY DISCORD...
+
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 
 local Games = 
@@ -26,7 +28,6 @@ if not associated then
         Duration = 15
     })
 
-    Window:Destroy()
 end
 
 local function loadScript() : ()
@@ -41,7 +42,6 @@ local function loadScript() : ()
         Duration = 10
         })
 
-        Fluent:Destroy()
     else
 
 
@@ -52,7 +52,6 @@ local function loadScript() : ()
         Duration = 15
         })
 
-        Fluent:Destroy()
     end
 end
 
