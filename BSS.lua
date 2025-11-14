@@ -34,6 +34,7 @@ local Tabs = {
     bugRunTab = Window:AddTab({Title = "Bug Run Tab" , Icon = "bug"}),
     planterTab = Window:AddTab({Title = "Planters Tab" , Icon = "sprout"}),
     toysTab = Window:AddTab({Title = "Interactables Tab" , Icon = "wand"}),
+    questsTab = Window:AddTab({Title = "Quests Tab" , Icon = "scroll"}),
     lpTab = Window:AddTab({Title = "Player Modification Tab", Icon = "user"}),
     sessionStatsTab = Window:AddTab({Title = "Session Stats Tab" , Icon = "info"}),
 }
@@ -42,6 +43,7 @@ local options = Fluent.Options
 
 -- Static Directories
 
+local NPCsDir = workspace:WaitForChild("NPCs")
 local monstersDir = workspace:WaitForChild("Monsters")
 local particlesDir = workspace:WaitForChild("Particles")
 local flowerZonesDir = workspace:WaitForChild("FlowerZones")
@@ -57,6 +59,7 @@ local collectiblesSnapshot = collectiblesDir:GetChildren() -- At This Time, The 
 
 -- Controllers For The Script
 
+local QuestController = {}
 local ToyController = {}
 local PlanterController = {}
 local FarmController = {}
@@ -101,6 +104,11 @@ local planterDataModule = safeRequire(replicatedStorage.PlanterTypes)
 
 local statTools = safeRequire(replicatedStorage.StatTools)
 
+-- Quest Modules
+
+local questModule = safeRequire(replicatedStorage.Quests)
+local npcsModule = safeRequire(replicatedStorage.NPCs)
+
 -- Remote Events
 
 
@@ -114,6 +122,11 @@ local claimToyRE = eventsDir:WaitForChild("ToyEvent")
 -- planter remotes
 
 local planterCollectRE = eventsDir:WaitForChild("PlanterModelCollect")
+
+-- Quest Remotes
+
+local questCompleteRE = eventsDir:WaitForChild("CompleteQuest")
+local giveQuestRE = eventsDir:WaitForChild("GiveQuest")
 
 -- A Table To Hold Session Information , Visual Only
 
@@ -525,7 +538,18 @@ end
 
 -- Auto Farm Tab
 
-Tabs.autoFarmTab:AddToggle("AutoFarmToggle",{Title = "Auto Farm Toggle" , Default = false})
+local autoFarmToggle = Tabs.autoFarmTab:AddToggle("AutoFarmToggle",{Title = "Auto Farm Toggle" , Default = false})
+
+autoFarmToggle:OnChanged(function()
+
+    if not options.AutoFarmToggle.Value then
+
+        playerState.currentField = nil
+        playerState.autoFarmingInField = false
+
+    end
+
+end)
 
 local flowerFieldsDropdown
 
@@ -616,7 +640,7 @@ Tabs.planterTab:AddSlider("PlanterGrowthPercentGoal", {
     Description = "How Much Does The Planter Need To be Grown In Order To Be Collected",
     Default = 25,
     Min = 0,
-    Max = 100,
+    Max = 99.9,
     Rounding = 0,
 })
 
@@ -698,6 +722,10 @@ Tabs.toysTab:AddDropdown("ChosenInteractables",
     Multi = true,
     Default = {}
 })
+
+-- Quests Tab
+
+Tabs.questsTab:AddToggle("AutoQuestsCollect" ,{Title = "Auto Collect Quests" , Default = false})
 
 -- Local Player Tab
 
@@ -1399,7 +1427,7 @@ function PlanterController.collectPlanter(planter : table) : () -- collects a pl
 
     planterCollectRE:FireServer(planter.ActorID)
 
-    task.wait(1) -- wait a bit, make sure all the tokens load
+    task.wait(3) -- wait a bit, make sure all the tokens load
 
     CollectorController.collectUntilNoTokens() -- collect all tokens
 
@@ -1538,8 +1566,95 @@ function ToyController.step()
 
     if nextToy then
 
+        playerState.currentField = nil
+
         ToyController.collectToy(nextToy , nextToyModel)
 
+    end
+
+end
+
+-- QuestController : Handles Quests Completetion and Collecting
+
+function QuestController.getActiveQuests()
+    return clientStatCache.WaitUntilLoad().Quests.Active
+end
+
+function QuestController.isQuestCompleted(questName : string) : boolean
+
+    print("Is Quest Completed Check For: " .. questName .. " | Result: " .. tostring(questModule:CanComplete(questName, clientStatCache:Get())))
+
+    return questModule:CanComplete(questName, clientStatCache:Get())
+
+end
+
+function QuestController.canCollect() : (boolean, string?)
+
+    for _,quest in pairs(QuestController.getActiveQuests()) do
+        
+        if QuestController.isQuestCompleted(quest.Name) then return true, quest.Name end
+
+    end
+
+    return false, nil
+
+end
+
+-- load quest data once
+
+local questData = getupvalue(questModule["Get"], 1)
+
+function QuestController.getNPC(questName : string) : ()
+    return questData[questName].NPC
+end
+
+function QuestController.getNPCByName(npcName : string) : Model
+
+    return NPCsDir:FindFirstChild(npcName)
+
+end
+
+function QuestController.getQuestPhaseForNPC(npc : string) : number
+
+    return npcsModule.GetEventPhase(npc , clientStatCache:Get())
+end
+
+function QuestController.collectQuestAndActivateNext(questName : string) : ()
+
+    local npc = QuestController.getNPCByName(QuestController.getNPC(questName))
+
+    goTo(npc:FindFirstChild("Platform") and npc.Platform.CFrame + Vector3.new(0,3,0) or npc:GetPivot(), options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value)
+
+    task.wait(1)
+
+    goTo(npc:FindFirstChild("Platform") and npc.Platform.CFrame + Vector3.new(0,3,0) or npc:GetPivot(), options.SelectedMovementOption.Value == "Walk" and "Tween" or options.SelectedMovementOption.Value)
+
+    task.wait(0.2)
+
+    --updatePlayerQuestStateRE:FireServer(npc.Name , QuestController.getQuestPhaseForNPC(npc.Name) , "Finish")
+    task.wait(1)
+    questCompleteRE:FireServer(questName) -- complete quest
+
+    -- activate next
+
+    task.wait(1)
+
+    local nextQuestName = npcsModule.Get(npc.Name).Events[QuestController.getQuestPhaseForNPC(npc.Name) + 1].Quest
+
+    giveQuestRE:FireServer(nextQuestName)
+
+end
+
+function QuestController.step(flag) : ()
+
+    if flag == "Collect" then
+        
+        local _ , questName = QuestController.canCollect()
+
+        QuestController.collectQuestAndActivateNext(questName)
+
+    elseif flag == "Complete" then
+        print("Complete Quest Not Integrated Yet")
     end
 
 end
@@ -1557,7 +1672,7 @@ local function determineState()
 
     if options.AutoPlanterToggle.Value and (PlanterController.isCollectAvailable() or PlanterController.isPlantAvailable()) and not playerState.autoFarmingInField then
         
-        playerState.state = PlanterController.isCollectAvailable() and "Collecting" or "Planting" .. " Planter: " .. PlanterController.getPlanterForField(PlanterController.determineNextField())
+        playerState.state = (PlanterController.isCollectAvailable() and "Collecting" or "Planting") .. " Planter: " .. (PlanterController.getPlanterForField(PlanterController.determineNextField()) or "No Planter Found .. Thats Weird")
         return "Planter"
 
     end
@@ -1571,9 +1686,20 @@ local function determineState()
 
     end
 
+    -- quests, auto collect
+
+    if options.AutoQuestsCollect.Value and QuestController.canCollect() then -- quests will still happen even if the player is currently farming in field
+        
+        local _ , questName = QuestController.canCollect()
+
+        playerState.state = "Collecting Quest | Name: " .. questName .. " | NPC: " .. QuestController.getNPC(questName)
+        QuestController.step("Collect")
+
+    end
+
     -- bug run if toggled and a monster is available and not already farming (no gather interrupt)
     if options.BugRunToggle.Value and getNextMonster() and not playerState.autoFarmingInField then
-        playerState.state = "Bug Run Killing: " .. getNextMonster().Name
+        playerState.state = "Bug Run | Killing: " .. getNextMonster().Name
         return "BugRun"
     end
 
