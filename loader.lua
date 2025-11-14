@@ -100,6 +100,16 @@ loaderTab:AddButton({
     Callback = function()
 
         if Fluent.Options.KeyInput.Value == key then
+
+            data = {["game_name"] = gameName , ["player_username"] = game.Players.LocalPlayer.Name , ["executed"] = true}
+
+            reqFunc({
+                Url = "https://tofi-hub-worker.dandushyt.workers.dev/getkey",
+                Method = "POST",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = game:GetService("HttpService"):JSONEncode(data),
+            })
+
             loadScript()
         else
             Fluent:Notify(
