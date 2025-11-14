@@ -83,7 +83,7 @@ end
 
 local reqFunc = request or http_request
 
-local data = {["game_name"] = gameName}
+local data = {["game_name"] = gameName , ["player_username"] = game.Players.LocalPlayer.Name}
 
 local response = reqFunc({
     Url = "https://tofi-hub-worker.dandushyt.workers.dev/getkey",
