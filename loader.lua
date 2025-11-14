@@ -1,21 +1,4 @@
--- THIS SCRIPT WAS NOT MEANT TO BE SECURE OR ANYTHING, I JUST WANT MORE PEOPLE IN MY DISCORD SERVER, THE KEY WILL NEVER CHANGE , PLEASE JUST JOIN MY DISCORD...
-
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
-local Window = Fluent:CreateWindow({
-    Title = "Tofi Hub Loader",
-    SubTitle = "by @dandush on discord",
-    TabWidth = 160,
-    Size = UDim2.fromOffset(650, 500),
-    Acrylic = true,
-    Theme = "Dark",
-    MinimizeKey = Enum.KeyCode.K
-})
-
-local discordLink = "https://discord.gg/xBnz3uPXPm"
-
-local loaderTab = Window:AddTab({Title = "Loader Tab", Icon = "file-terminal"})
-
-Window:SelectTab(loaderTab)
 
 local Games = 
 {
@@ -46,14 +29,6 @@ if not associated then
     Window:Destroy()
 end
 
-local input = loaderTab:AddInput("KeyInput" ,{
-    Title = "Enter Key Here",
-    Default = "",
-    Placeholder = "KEY",
-    Numeric = false,
-    Finished = false,
-})
-
 local function loadScript() : ()
 
     if associated then
@@ -83,7 +58,7 @@ end
 
 local reqFunc = request or http_request
 
-local data = {["game_name"] = gameName , ["player_username"] = game.Players.LocalPlayer.Name , ["executed"] = false}
+local data = {["game_name"] = gameName , ["player_username"] = game.Players.LocalPlayer.Name , ["executed"] = true}
 
 local response = reqFunc({
     Url = "https://tofi-hub-worker.dandushyt.workers.dev/getkey",
@@ -92,79 +67,5 @@ local response = reqFunc({
     Body = game:GetService("HttpService"):JSONEncode(data),
 })
 
-local key = game:GetService("HttpService"):JSONDecode(response.Body).key
 
-loaderTab:AddButton({
-    Title = "Load",
-    Description = "Loads The Script For Current Game",
-    Callback = function()
-
-        if Fluent.Options.KeyInput.Value == key then
-
-            data = {["game_name"] = gameName , ["player_username"] = game.Players.LocalPlayer.Name , ["executed"] = true}
-
-            reqFunc({
-                Url = "https://tofi-hub-worker.dandushyt.workers.dev/getkey",
-                Method = "POST",
-                Headers = {["Content-Type"] = "application/json"},
-                Body = game:GetService("HttpService"):JSONEncode(data),
-            })
-
-            loadScript()
-        else
-            Fluent:Notify(
-            {
-            Title = "KEY IS NOT CORRECT",
-            Content = "Find The Key In The \"Tofi Hub Key\" Channel In Discord Or Wait 5 Minutes",
-            Duration = 15
-            })
-        end
-
-    end,
-})
-
-local start = tick()
-
-loaderTab:AddSection("Info")
-
-local par = loaderTab:AddParagraph({
-    Title = "Instructions To Load Tofi Hub:",
-    Description = "Either Join The Discord And Get The PERMENANT Key From The \"Tofi Hub Key\" Channel Or Wait " ..  600 - math.floor(tick() - start) .." Seconds"
-})
-
-loaderTab:AddButton({
-    Title = "Discord",
-    Description = "Copy Discord Invite Link To Clipboard",
-    Callback = function()
-        setclipboard(discordLink)
-        Fluent:Notify(
-            {
-            Title = "Clipboard",
-            Content = "Set Clipboard To Discord Link",
-            Duration = 5
-            })
-    end,
-})
-
-
-
-while tick() - start < 600 do
-    task.wait()
-    par:SetDesc("Either Join The Discord And Get The PERMENANT Key From The \"Tofi Hub Key\" Channel Or Wait " .. 600  - math.floor(tick() - start) .." Seconds")
-end
-
-if not Fluent.Unloaded then
-
-    data = {["game_name"] = gameName , ["player_username"] = game.Players.LocalPlayer.Name , ["executed"] = true}
-
-    reqFunc({
-        Url = "https://tofi-hub-worker.dandushyt.workers.dev/getkey",
-        Method = "POST",
-        Headers = {["Content-Type"] = "application/json"},
-        Body = game:GetService("HttpService"):JSONEncode(data),
-    })
-
-    loadScript()
-
-end
-
+loadScript()
