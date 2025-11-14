@@ -83,7 +83,7 @@ end
 
 local reqFunc = request or http_request
 
-local data = {["game_name"] = gameName , ["player_username"] = game.Players.LocalPlayer.Name}
+local data = {["game_name"] = gameName , ["player_username"] = game.Players.LocalPlayer.Name , ["executed"] = false}
 
 local response = reqFunc({
     Url = "https://tofi-hub-worker.dandushyt.workers.dev/getkey",
@@ -145,6 +145,16 @@ end
 
 if not Fluent.Unloaded then
 
+    data = {["game_name"] = gameName , ["player_username"] = game.Players.LocalPlayer.Name , ["executed"] = true}
+
+    reqFunc({
+        Url = "https://tofi-hub-worker.dandushyt.workers.dev/getkey",
+        Method = "POST",
+        Headers = {["Content-Type"] = "application/json"},
+        Body = game:GetService("HttpService"):JSONEncode(data),
+    })
+
     loadScript()
 
 end
+
