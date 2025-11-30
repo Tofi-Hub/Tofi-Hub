@@ -139,7 +139,7 @@ local function castRod(rod : Tool)
 
 end
 
-local function finishCast(rod : Tool, autoFarmToggle : boolean ,  playerBar : Frame) : ()
+local function finishCast(rod : Tool, autoFarmToggle : boolean ,  playerBar : Frame, fish : Frame) : ()
     local reel = player.PlayerGui:FindFirstChild("reel")
     if not reel then
         notify(true,"Finish Cast Error", "Attempt To Finish Cast When Not In Reeling Phase")
@@ -156,24 +156,44 @@ local function finishCast(rod : Tool, autoFarmToggle : boolean ,  playerBar : Fr
 
     local breakVar = false
 
+    fish.Parent:GetPropertyChangedSignal("Visible"):Wait()
+    fish.Parent:GetPropertyChangedSignal("Visible"):Wait() -- wait until actually visible
+
+    print("Visiblity Changed")
+
+    local sum = nil
+
+    for _, connection in pairs(getconnections(replicatedStorage.packages.Net["RE/ProgressModifier"].OnClientEvent)) do
+        if connection.Function then
+            local upval = getupvalue(connection.Function, 1)
+            if upval then
+                if type(upval) == "table" then
+                    sum = upval
+                    break
+                end
+            end
+        end
+    end
+
+    print("Bar Size: " .. sum.barSize)
+
     task.spawn(function()
         while not breakVar do
             if playerBar then
-                playerBar.AnchorPoint = Vector2.new(0, 0) 
-                playerBar.Size = UDim2.new(1,0,1,0)
-                playerBar.Position = UDim2.new(0,0,0,0)
+                sum.barSize = 1e8 -- big size me go wow
                 task.wait()
             else break end
         end
     end)
-    
-    local fish = playerBar.Parent.fish
-    fish:GetPropertyChangedSignal("Position"):Wait()
-    fish:GetPropertyChangedSignal("Position"):Wait() -- wait until the fish actually moves
 
-    task.wait(0.4)
+    fish:GetPropertyChangedSignal("Position"):Wait()
+    fish:GetPropertyChangedSignal("Position"):Wait() -- wait until fish position changes
+
+    task.wait(0.5)
 
     reelFinished:FireServer(100, false)
+
+    print("Reel finished fired")
 
     breakVar = true
 
@@ -1283,7 +1303,13 @@ end)
 player:WaitForChild("PlayerGui").childAdded:Connect(function(child)
     if autoReelToggle then
         if child.Name == "reel" then
-            finishCast(getRod(), autoFarmToggle , child:WaitForChild("bar"):WaitForChild("playerbar"))
+            finishCast(getRod(), autoFarmToggle , child:WaitForChild("bar"):WaitForChild("playerbar") , child:WaitForChild("bar"):WaitForChild("fish"))
         end
     end
 end)
+
+while task.wait(300) do
+    game:GetService("VirtualInputManager"):SendKeyEvent(true, Enum.KeyCode.Tilde, false, nil)
+    task.wait(0.1)
+    game:GetService("VirtualInputManager"):SendKeyEvent(false, Enum.KeyCode.Tilde, false, nil)
+end
