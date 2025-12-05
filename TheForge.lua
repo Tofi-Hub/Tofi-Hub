@@ -1,5 +1,5 @@
 -- services --
-local ContentProvider = game:GetService("ContentProvider")
+local uis = game:GetService("UserInputService")
 local players = game:GetService("Players")
 local workspace = game:GetService("Workspace")
 local replicatedStorage = game:GetService("ReplicatedStorage")
@@ -764,9 +764,35 @@ task.spawn(function()
     end
 end)
 
+local isMobile = uis.TouchEnabled and not uis.KeyboardEnabled
+
+if isMobile then
+
+    local gui = Instance.new("ScreenGui")
+    gui.IgnoreGuiInset = true
+    gui.ResetOnSpawn = false
+    gui.Parent = game:GetService("CoreGui")
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 80, 0, 80)
+    btn.Position = UDim2.new(1, -80, 0.5, -40)
+    btn.BackgroundColor3 = Color3.fromRGB(50, 120, 255)
+    btn.Text = "Toggle GUI"
+    btn.TextScaled = true
+    btn.Font = Enum.Font.GothamBold
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Active = true
+    btn.Parent = gui
+
+    btn.MouseButton1Click:Connect(function()
+        Window:Minimize()
+    end)
+
+end
 
 while task.wait(300) do
     game:GetService("VirtualInputManager"):SendKeyEvent(true, Enum.KeyCode.Tilde, false, nil)
     task.wait(0.1)
     game:GetService("VirtualInputManager"):SendKeyEvent(false, Enum.KeyCode.Tilde, false, nil)
 end
+
