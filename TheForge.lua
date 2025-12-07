@@ -13,6 +13,8 @@ local HRP = character:WaitForChild("HumanoidRootPart")
 local humanoid = character:FindFirstChildOfClass("Humanoid")
  -- fluent
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
 local Window = Fluent:CreateWindow({
     Title = "The Forge GUI",
     SubTitle = "by @dandush on discord",
@@ -29,6 +31,8 @@ local Tabs = {
     oresTab = Window:AddTab({Title = "Ores Tab" , Icon = "hammer"}),
     combatTab = Window:AddTab({Title = "Combat Tab" , Icon = "sword"}),
     autoSellTab = Window:AddTab({Title = "Auto Sell Tab" , Icon = "dollar-sign"}),
+    forgingTab = Window:AddTab({Title = "Forge Tab", Icon = "landmark"}),
+    settingsTab = Window:AddTab({Title = "Config", Icon = "settings"})
 }
 
 -- Death Connections To Retain Local References
@@ -68,12 +72,21 @@ local MovementController = {}
 local MiningController = {}
 local SellController = {}
 local CombatController = {}
+local ForgeController = {}
 
 -- Static Directories
 
 local cavesFolder = workspace:WaitForChild("Rocks")
 local enemiesFolder = workspace:WaitForChild("Living")
 local runesModuleDir = replicatedStorage:WaitForChild("Shared"):WaitForChild("Data"):WaitForChild("Runes")
+local forgeControllerModuleDir = replicatedStorage:WaitForChild("Controllers"):WaitForChild("ForgeController")
+
+-- For Some Reason Some Mob's Islands Have Weird Values Like "Iron Valley" Which Isn't Even An Island So I'll Make A Little Lookup Table Since There Dont Seem To Be Any Links Between Iron Valley And Stonewake's Cross etc.
+
+local weirdIslandData =
+{
+    ["Iron Valley"] = "Stonewake's Cross"
+}
 
 -- Functions
 
@@ -160,7 +173,7 @@ function MovementController.teleport(position : CFrame , useCFrame : boolean) : 
     proxy.Value = character:GetPivot()
 
     local dist = (HRP.Position - position.Position).Magnitude
-    local length = dist / 60 -- 60 studs/s
+    local length = dist / 50 -- 50 studs/s
 
     local tweenInfo = TweenInfo.new(length, Enum.EasingStyle.Linear)
 
@@ -211,7 +224,7 @@ function MiningController.breakOre(hitbox : BasePart, toggle : table) : ()
     repeat
 
         toolActivatedRF:InvokeServer("Pickaxe")
-        task.wait(0.1)
+        task.wait()
 
         if hpGUI.Text ~= lastValue then
             lastChange = tick()
@@ -220,7 +233,10 @@ function MiningController.breakOre(hitbox : BasePart, toggle : table) : ()
             timeUnchanged = tick() - lastChange
         end
 
-        if (hitbox.Parent:GetAttribute("LastHitPlayer") or player.Name) ~= player.Name then break end
+        local lastPlayer = hitbox.Parent:GetAttribute("LastHitPlayer")
+        local lastTime = hitbox.Parent:GetAttribute("LastHitTime")
+
+        if lastPlayer and lastPlayer ~= player.Name and lastTime and (tick()  - lastTime < 10) then break end
 
     until
     not hitbox.Parent -- no hitbox (ore is destroyed)
@@ -253,7 +269,10 @@ function MiningController.getClosestOreInCave(cave : Folder) : BasePart?
 
         if #children == 0 then continue end
 
-        if (children[1]:GetAttribute("LastHitPlayer") or player.Name) ~= player.Name then continue end
+        local lastPlayer = children[1]:GetAttribute("LastHitPlayer")
+        local lastTime = children[1]:GetAttribute("LastHitTime")
+
+        if lastPlayer and lastPlayer ~= player.Name and lastTime and (tick()  - lastTime < 10) then continue end
 
         if glitchedOres[ore] then
             if tick() - glitchedOres[ore] > 1000 then
@@ -301,7 +320,10 @@ function MiningController.getClosestOreWithNames() : BasePart?
 
             if #children == 0 then continue end
 
-            if (children[1]:GetAttribute("LastHitPlayer") or player.Name) ~= player.Name then continue end
+            local lastPlayer = children[1]:GetAttribute("LastHitPlayer")
+            local lastTime = children[1]:GetAttribute("LastHitTime")
+
+            if lastPlayer and lastPlayer ~= player.Name and lastTime and (tick()  - lastTime < 10) then continue end
 
             if glitchedOres[ore] then
                 if tick() - glitchedOres[ore] > 1000 then
@@ -522,26 +544,33 @@ function CombatController.killEnemy(enemy : Model) : ()
         and enemy:FindFirstChild("HumanoidRootPart"):FindFirstChild("infoFrame"):FindFirstChild("Frame"):FindFirstChild("rockHP")
         and enemy:FindFirstChild("HumanoidRootPart"):FindFirstChild("infoFrame"):FindFirstChild("Frame"):FindFirstChild("rockHP") or {Text = "0 HP"}
 
-    MovementController.teleport(CFrame.new(enemy:GetPivot().Position + enemy:GetPivot().LookVector * 8 , enemy:GetPivot().Position), false)
+    MovementController.teleport(CFrame.new(enemy:GetPivot().Position - enemy:GetPivot().LookVector * 8 , enemy:GetPivot().Position), false)
 
     repeat
 
-        MovementController.teleport(CFrame.new(enemy:GetPivot().Position + enemy:GetPivot().LookVector * 8 , enemy:GetPivot().Position), true)
+        task.wait()
+
+        if not character or not character.Parent then continue end
+
+        MovementController.teleport(CFrame.new(enemy:GetPivot().Position - enemy:GetPivot().LookVector * 8 , enemy:GetPivot().Position), true)
         
         task.spawn(function() toolActivatedRF:InvokeServer("Weapon") end)
-
-        task.wait()
 
     until not enemy.Parent or hpText.Text == "0 HP" or not HRP.Parent or not character.Parent
 
 end
 
 function CombatController.getEnemyTypesAtIsland(islandName : string) : table
+
+    if islandName == "NOT FOUND" then print("Island Name Not Found") return {"ISLAND NOT FOUND"} end
+
+    print("Getting Enemy Types At Island: " .. islandName)
+
     local tbl = {}
 
     for _,v in pairs(enemiesData) do
 
-        if v.Island == islandName then
+        if (v.Island == islandName) or (weirdIslandData[v.Island] == islandName) then -- weird island data basically links stuff like "Iron Valley" to "Stonewake's Cross"
 
             table.insert(tbl,v.Name)
 
@@ -626,6 +655,154 @@ function CombatController.getEnemyByName() : Model?
     return closestEnemy
 end
 
+-- Forge Controller
+
+function ForgeController.getMeltMinigameMainFunc() : () -> nil
+
+    for _, con in pairs(getconnections(rs.RenderStepped)) do
+        
+        if con.Function then
+            
+            local success, isNumber = pcall(function()
+                return typeof(getupvalue(con.Function, 22)) == "number"
+            end)
+
+            if success and isNumber then
+                
+                return con.Function
+
+            end
+
+        end
+
+    end
+
+    return nil
+
+end
+
+function ForgeController.getPourMinigameMainFunc() : () -> nil
+
+    for _, con in pairs(getconnections(rs.RenderStepped)) do
+        
+        if con.Function then
+            
+            local success, isNumber = pcall(function()
+                return typeof(getupvalue(con.Function, 23)) == "boolean"
+            end)
+
+            if success and isNumber then
+                
+                return con.Function
+
+            end
+
+        end
+
+    end
+
+    return nil
+
+end
+
+function ForgeController.getHammerMinigameMainFunc() : () -> nil
+
+    for _,desc in pairs(workspace.Debris:GetDescendants()) do
+
+        if not desc:IsA("ClickDetector") then continue end
+
+        for _, con in pairs(getconnections(desc.MouseClick)) do
+
+            if con.Function then
+
+                local success, isNumber = pcall(function()
+                    return typeof(getupvalue(con.Function, 1)) == "number"
+                end)
+
+                if success and isNumber then
+
+                    return con.Function
+
+                end
+
+            end
+
+        end
+
+    end
+
+    return nil
+
+end
+
+function ForgeController.completeHammerMinigameSecond()
+
+    local mainMinigameGUI = player.PlayerGui.Forge.HammerMinigame
+
+    local con
+
+    con = mainMinigameGUI.ChildAdded:Connect(function(child)
+    
+        if child.Name == "Frame" and child:IsA("TextButton") then
+            local circle = child:FindFirstChild("Frame"):WaitForChild("Circle")
+            
+            task.spawn(function()
+
+                repeat
+                    task.wait(0.01)
+                until circle.Size.X.Scale <= 1.2
+            
+                firesignal(child.MouseButton1Click)
+            end)
+        end
+    end)
+
+    repeat
+        task.wait()
+    until not mainMinigameGUI.Visible
+
+    con:Disconnect()
+
+end
+
+function ForgeController.completeForge() : ()
+
+        local meltMinigameFunction = nil
+
+        repeat
+            meltMinigameFunction = ForgeController.getMeltMinigameMainFunc()
+            task.wait()
+        until meltMinigameFunction
+
+        print("Got Melt Minigame Function")
+        
+        setupvalue(meltMinigameFunction, 19 , true)
+
+        local pourMinigameFunction = nil
+
+        repeat
+            pourMinigameFunction = ForgeController.getPourMinigameMainFunc()
+            task.wait()
+        until pourMinigameFunction
+
+        print("Got Pour Minigame Function")
+
+        setupvalue(pourMinigameFunction , 23 , true)
+
+        local hammerMinigameFunction = nil
+
+        repeat
+            hammerMinigameFunction = ForgeController.getHammerMinigameMainFunc()
+            task.wait()
+        until hammerMinigameFunction
+
+        print("Got Hammer Minigame Function")
+
+        setupvalue(hammerMinigameFunction , 1 , 69420)
+
+        ForgeController.completeHammerMinigameSecond()
+
+end
 
 -- GUI Setup
 
@@ -703,14 +880,44 @@ Tabs.autoSellTab:AddButton({
     end,
 })
 
+-- Forging Tab
+
+Tabs.forgingTab:AddParagraph({Title = "How To Use Auto-Forge", Content = "1: Enter The Forge And Use The Ores You Want\n2: Start Minigame \n3: Press The Auto-Forge Button\n4:Complete The Minigame Until The Last Step\n5: Rejoin\n6: Enjoy!"})
+
+Tabs.forgingTab:AddButton({
+    Title = "Forge",
+    Description = "Auto Forge (Follow Steps Above)",
+    Callback = function()
+        Fluent:Notify({
+            Title = "AUTO FORGE",
+            Content = "START",
+            Subcontent = "Auto Forge Started",
+            Duration = 3,
+        })
+
+        ForgeController.completeForge()
+
+        Fluent:Notify({
+            Title = "AUTO FORGE",
+            Content = "END",
+            Subcontent = "Auto Forge Ended",
+            Duration = 5,
+        })
+    end
+
+
+
+})
+
 -- Main Loop
+
 local function determineState()
 
     if options.AutoSellToggle.Value and SellController.isInventoryFull() then
         return "Selling"
-    elseif options.AutoFarmOresFromCaveToggle.Value or options.AutoFarmOresWithNameToggle.Value then
+    elseif (options.AutoFarmOresFromCaveToggle.Value or options.AutoFarmOresWithNameToggle.Value) and (MiningController.getClosestOreInCave(cavesFolder:FindFirstChild(caveSelectDropdown.Value)) or MiningController.getClosestOreWithNames()) then
         return "Mining"
-    elseif options.AutoKillMobsToggle.Value then
+    elseif options.AutoKillMobsToggle.Value and CombatController.getEnemyByName() then
         return "Killing"
     else
         return "Idle"
@@ -789,6 +996,32 @@ if isMobile then
     end)
 
 end
+
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+
+-- Ignore keys that are used by ThemeManager.
+-- (we dont want configs to save themes, do we?)
+SaveManager:IgnoreThemeSettings()
+
+-- You can add indexes of elements the save manager should ignore
+SaveManager:SetIgnoreIndexes({})
+
+-- use case for doing it this way:
+-- a script hub could have themes in a global folder
+-- and game configs in a separate folder per game
+InterfaceManager:SetFolder("TofiHub")
+SaveManager:SetFolder("Tofi_Hub/The_Forge")
+
+InterfaceManager:BuildInterfaceSection(Tabs.settingsTab)
+SaveManager:BuildConfigSection(Tabs.settingsTab)
+
+
+Window:SelectTab(1)
+
+-- You can use the SaveManager:LoadAutoloadConfig() to load a config
+-- which has been marked to be one that auto loads!
+SaveManager:LoadAutoloadConfig()
 
 while task.wait(300) do
     game:GetService("VirtualInputManager"):SendKeyEvent(true, Enum.KeyCode.Tilde, false, nil)
