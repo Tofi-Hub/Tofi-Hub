@@ -12,6 +12,7 @@ Tofi Hub currently supports the following titles:
 - 🥚 **Egg Farm Simulator**
 - 🐟 **Fisch**
 - 💎 **Merge Simulator**
+- 🛠️ **The Forge**
 
 Whether you’re looking to automate, enhance, or simply explore, Tofi Hub ensures a safe and efficient experience across all supported games.
 
