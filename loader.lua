@@ -1,5 +1,3 @@
--- THIS SCRIPT WAS NOT MEANT TO BE SECURE OR ANYTHING, I JUST WANT MORE PEOPLE IN MY DISCORD SERVER, THE KEY WILL NEVER CHANGE , PLEASE JUST JOIN MY DISCORD...
-
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 
 local Games = 
@@ -11,12 +9,12 @@ local Games =
     [16732694052] = "Fisch.lua",
     [10925589760] = "MergeSimulator.lua",
     [1537690962] = "BSS.lua",
-    [76558904092080] = "TheForge.lua"
+    [7671049560] = "TheForge.lua"
 }
 
 local placeID = game.PlaceId
 
-local associated = Games[placeID]
+local associated = Games[placeID] or Games[game.GameId]
 
 local MarketplaceService = game:GetService("MarketplaceService")
 local gameName = MarketplaceService:GetProductInfo(game.PlaceId).Name
