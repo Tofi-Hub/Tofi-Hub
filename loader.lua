@@ -11,6 +11,7 @@ local Games =
     [16732694052] = "Fisch.lua",
     [10925589760] = "MergeSimulator.lua",
     [1537690962] = "BSS.lua",
+    [76558904092080] = "TheForge.lua"
 }
 
 local placeID = game.PlaceId
