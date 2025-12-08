@@ -203,7 +203,7 @@ end
 function MiningController.breakOre(hitbox : BasePart, toggle : table) : ()
     if not hitbox then return end
 
-    MovementController.teleport((hitbox.CFrame + Vector3.new(0,4,0)) * CFrame.Angles(math.rad(-90), 0, 0), true)
+    MovementController.teleport((hitbox.CFrame - Vector3.new(0,4,0)) * CFrame.Angles(math.rad(90), 0, 0), true)
 
     HRP.Anchored = true
 
@@ -423,7 +423,7 @@ function SellController.formatSellable(oreTable : table, miscTable : table) : ta
 
     for _,v in pairs(miscTable) do
         if v.Name or v.GUID then
-            if not options.DONTAutoSellMisc.Value[v.Name] and not options.DONTAutoSellRarities.Value[SellController.getMiscRarity(v.Name or v.Id)] then
+            if not options.DONTAutoSellMisc.Value[v.Name or v.Id] and not options.DONTAutoSellRarities.Value[SellController.getMiscRarity(v.Name or v.Id)] then
                 tbl[v.Name or v.GUID] = v.Quantity or 1
             end
         end
@@ -882,7 +882,7 @@ Tabs.autoSellTab:AddButton({
 
 -- Forging Tab
 
-Tabs.forgingTab:AddParagraph({Title = "How To Use Auto-Forge", Content = "1: Enter The Forge And Use The Ores You Want\n2: Start Minigame \n3: Press The Auto-Forge Button\n4:Complete The Minigame Until The Last Step\n5: Rejoin\n6: Enjoy!"})
+Tabs.forgingTab:AddParagraph({Title = "How To Use Auto-Forge", Content = "1: Enter The Forge And Select The Ores And Weapon You Want\n2: Press The Auto-Forge Button\n3: Start Minigame\n4: Enjoy!"})
 
 Tabs.forgingTab:AddButton({
     Title = "Forge",
@@ -915,10 +915,10 @@ local function determineState()
 
     if options.AutoSellToggle.Value and SellController.isInventoryFull() then
         return "Selling"
-    elseif (options.AutoFarmOresFromCaveToggle.Value or options.AutoFarmOresWithNameToggle.Value) and (MiningController.getClosestOreInCave(cavesFolder:FindFirstChild(caveSelectDropdown.Value)) or MiningController.getClosestOreWithNames()) then
-        return "Mining"
     elseif options.AutoKillMobsToggle.Value and CombatController.getEnemyByName() then
         return "Killing"
+    elseif (options.AutoFarmOresFromCaveToggle.Value or options.AutoFarmOresWithNameToggle.Value) and (MiningController.getClosestOreInCave(cavesFolder:FindFirstChild(caveSelectDropdown.Value)) or MiningController.getClosestOreWithNames()) then
+        return "Mining"
     else
         return "Idle"
     end
